@@ -27,17 +27,21 @@ import java.util.Optional;
 @Slf4j
 public class BingoMainPanel extends PluginPanel
 {
+    // Enhanced color scheme
+    private static final Color ACCENT_COLOR = new Color(0, 150, 200);
     private static final Color HOVER_COLOR = ColorScheme.BRAND_ORANGE;
     private static final Color BUTTON_COLOR = ColorScheme.DARKER_GRAY_COLOR;
-    private static final Color SUCCESS_COLOR = new Color(0, 150, 0);
+    private static final Color BUTTON_HOVER_COLOR = new Color(80, 80, 80);
+    private static final Color SUCCESS_COLOR = new Color(0, 180, 0);
     private static final Color ERROR_COLOR = ColorScheme.PROGRESS_ERROR_COLOR;
+    private static final Color INFO_PANEL_COLOR = new Color(45, 45, 45);
+    private static final Color CARD_BORDER_COLOR = new Color(70, 70, 70);
 
     private final BingoConfig config;
     private final BingoService bingoService;
     private final ConfigManager configManager;
     private final Runnable onLogout;
     
-    private JLabel userInfoLabel;
     private JComboBox<EventItem> eventDropdown;
     private JPanel eventInfoPanel;
     private JLabel totalParticipantsLabel;
@@ -49,9 +53,8 @@ public class BingoMainPanel extends PluginPanel
     private JLabel statusLabel;
     private Timer eventRefreshTimer;
     
-    // Top action buttons
+    // Icon buttons
     private JButton viewProfileButton;
-    private JButton settingsButton;
     private JButton logoutButton;
     
     public BingoMainPanel(BingoConfig config, BingoService bingoService, ConfigManager configManager, Runnable onLogout)
@@ -74,65 +77,70 @@ public class BingoMainPanel extends PluginPanel
         log.info("BingoMainPanel initialized");
     }
     
+    @Override
+    public Insets getInsets()
+    {
+        return new Insets(0, 0, 0, 0); // Remove any default insets
+    }
+    
     private void initializeComponents()
     {
         setBackground(ColorScheme.DARK_GRAY_COLOR);
         
-        // Top action buttons
-        viewProfileButton = createCompactButton("View Profile");
-        settingsButton = createCompactButton("Settings");
-        logoutButton = createCompactButton("Logout");
+        // Icon-based buttons with 25% width each
+        viewProfileButton = createIconButton("👤", "Profile", ACCENT_COLOR);
+        logoutButton = createIconButton("🚪", "Logout", new Color(180, 50, 50));
         
-        // User info label
-        userInfoLabel = new JLabel("Welcome, " + config.rsn());
-        userInfoLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        userInfoLabel.setFont(userInfoLabel.getFont().deriveFont(Font.BOLD, 14f));
-        userInfoLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        
-        // Event dropdown
+        // Enhanced event dropdown
         eventDropdown = new JComboBox<>();
-        eventDropdown.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        eventDropdown.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        eventDropdown.setBackground(INFO_PANEL_COLOR);
+        eventDropdown.setForeground(Color.WHITE);
+        eventDropdown.setFont(eventDropdown.getFont().deriveFont(13f));
+        eventDropdown.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(CARD_BORDER_COLOR, 1),
+            BorderFactory.createEmptyBorder(8, 12, 8, 12)
+        ));
         eventDropdown.setRenderer(new EventItemRenderer());
         
-        // Event info labels
-        eventNameLabel = createInfoLabel("No event selected");
-        totalParticipantsLabel = createInfoLabel("Participants: -");
-        prizePoolLabel = createInfoLabel("Prize Pool: -");
-        timeRemainingLabel = createInfoLabel("Time Remaining: -");
-        totalTilesLabel = createInfoLabel("Total Tiles: -");
+        // Enhanced event info labels
+        eventNameLabel = createStyledInfoLabel("Select an event to view details");
+        totalParticipantsLabel = createStyledInfoLabel("Participants: -");
+        prizePoolLabel = createStyledInfoLabel("Prize Pool: -");
+        timeRemainingLabel = createStyledInfoLabel("Time Remaining: -");
+        totalTilesLabel = createStyledInfoLabel("Total Tiles: -");
         
-        // View Board button
-        viewBoardButton = createStyledButton("View Board");
+        // Enhanced View Board button
+        viewBoardButton = createPrimaryButton("View Bingo Board");
         viewBoardButton.setEnabled(false);
         
-        // Status label
+        // Enhanced status label
         statusLabel = new JLabel("Loading events...");
         statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        statusLabel.setFont(statusLabel.getFont().deriveFont(11f));
+        statusLabel.setFont(statusLabel.getFont().deriveFont(Font.ITALIC, 12f));
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
     }
     
-    private JLabel createInfoLabel(String text)
+    private JLabel createStyledInfoLabel(String text)
     {
         JLabel label = new JLabel(text);
-        label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        label.setFont(label.getFont().deriveFont(12f));
+        label.setForeground(Color.WHITE);
+        label.setFont(label.getFont().deriveFont(13f));
         return label;
     }
     
-    private JButton createCompactButton(String text)
+    private JButton createIconButton(String icon, String tooltip, Color backgroundColor)
     {
-        JButton button = new JButton(text);
-        button.setBackground(BUTTON_COLOR);
-        button.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        JButton button = new JButton(icon);
+        button.setBackground(backgroundColor);
+        button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
         button.setBorderPainted(false);
-        button.setPreferredSize(new Dimension(80, 28));
-        button.setFont(button.getFont().deriveFont(Font.BOLD, 11f));
+        button.setFont(button.getFont().deriveFont(Font.BOLD, 16f));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setBorder(BorderFactory.createEmptyBorder(8, 4, 8, 4));
+        button.setToolTipText(tooltip);
         
-        // Hover effect
+        // Enhanced hover effect
         button.addMouseListener(new MouseAdapter()
         {
             @Override
@@ -140,32 +148,33 @@ public class BingoMainPanel extends PluginPanel
             {
                 if (button.isEnabled())
                 {
-                    button.setBackground(HOVER_COLOR);
+                    button.setBackground(backgroundColor.brighter());
                 }
             }
             
             @Override
             public void mouseExited(MouseEvent e)
             {
-                button.setBackground(BUTTON_COLOR);
+                button.setBackground(backgroundColor);
             }
         });
         
         return button;
     }
     
-    private JButton createStyledButton(String text)
+    private JButton createPrimaryButton(String text)
     {
         JButton button = new JButton(text);
-        button.setBackground(BUTTON_COLOR);
-        button.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        button.setBackground(ACCENT_COLOR);
+        button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
         button.setBorderPainted(false);
-        button.setPreferredSize(new Dimension(120, 32));
-        button.setFont(button.getFont().deriveFont(Font.BOLD, 12f));
+        button.setPreferredSize(new Dimension(160, 40));
+        button.setFont(button.getFont().deriveFont(Font.BOLD, 13f));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
         
-        // Hover effect
+        // Primary button hover effect
         button.addMouseListener(new MouseAdapter()
         {
             @Override
@@ -173,14 +182,21 @@ public class BingoMainPanel extends PluginPanel
             {
                 if (button.isEnabled())
                 {
-                    button.setBackground(HOVER_COLOR);
+                    button.setBackground(ACCENT_COLOR.brighter());
                 }
             }
             
             @Override
             public void mouseExited(MouseEvent e)
             {
-                button.setBackground(BUTTON_COLOR);
+                if (button.isEnabled())
+                {
+                    button.setBackground(ACCENT_COLOR);
+                }
+                else
+                {
+                    button.setBackground(ColorScheme.MEDIUM_GRAY_COLOR);
+                }
             }
         });
         
@@ -190,120 +206,168 @@ public class BingoMainPanel extends PluginPanel
     private void setupLayout()
     {
         setLayout(new BorderLayout());
-        setBorder(new EmptyBorder(10, 10, 10, 10));
+        setBorder(null); // Remove all borders
         
-        // Header panel with logo
-        JPanel headerPanel = createHeaderPanel();
-        
-        // Top buttons panel
-        JPanel topButtonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 5));
-        topButtonsPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        topButtonsPanel.add(viewProfileButton);
-        topButtonsPanel.add(settingsButton);
-        topButtonsPanel.add(logoutButton);
-        
-        // Main content panel
+        // Main content panel with proper full-width layout
         JPanel mainPanel = new JPanel();
-        mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
+        mainPanel.setLayout(new GridBagLayout());
         mainPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        mainPanel.setBorder(new EmptyBorder(5, 5, 5, 5)); // Minimal border
         
-        // User info section
-        userInfoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        gbc.gridx = 0;
+        gbc.insets = new Insets(0, 0, 8, 0);
         
-        // Event selection section
-        JLabel eventLabel = new JLabel("Active Events:");
-        eventLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        eventLabel.setFont(eventLabel.getFont().deriveFont(Font.BOLD, 13f));
-        eventLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Combined header with login status
+        JLabel headerLabel = new JLabel("Clan.bingo - logged in as " + config.rsn());
+        headerLabel.setForeground(ACCENT_COLOR);
+        headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 14f));
+        gbc.gridy = 0;
+        mainPanel.add(headerLabel, gbc);
         
-        eventDropdown.setAlignmentX(Component.LEFT_ALIGNMENT);
-        eventDropdown.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
+        // Icon buttons panel with 25% width each
+        JPanel iconButtonsPanel = createIconButtonsPanel();
+        gbc.gridy = 1;
+        mainPanel.add(iconButtonsPanel, gbc);
         
-        // Event info panel
-        eventInfoPanel = new JPanel();
-        eventInfoPanel.setLayout(new BoxLayout(eventInfoPanel, BoxLayout.Y_AXIS));
-        eventInfoPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        eventInfoPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR),
-            BorderFactory.createEmptyBorder(12, 15, 12, 15)
-        ));
-        eventInfoPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Event selection card (full width)
+        JPanel eventSelectionCard = createEventSelectionCard();
+        gbc.gridy = 2;
+        gbc.insets = new Insets(10, 0, 8, 0);
+        mainPanel.add(eventSelectionCard, gbc);
         
-        eventInfoPanel.add(eventNameLabel);
-        eventInfoPanel.add(Box.createVerticalStrut(8));
-        eventInfoPanel.add(totalParticipantsLabel);
-        eventInfoPanel.add(Box.createVerticalStrut(8));
-        eventInfoPanel.add(prizePoolLabel);
-        eventInfoPanel.add(Box.createVerticalStrut(8));
-        eventInfoPanel.add(timeRemainingLabel);
-        eventInfoPanel.add(Box.createVerticalStrut(8));
-        eventInfoPanel.add(totalTilesLabel);
+        // Event info card (initially hidden)
+        eventInfoPanel = createEventInfoCard();
+        eventInfoPanel.setVisible(false); // Hide by default
+        gbc.gridy = 3;
+        gbc.insets = new Insets(0, 0, 10, 0);
+        mainPanel.add(eventInfoPanel, gbc);
         
-        // View Board button panel
-        JPanel viewBoardPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        viewBoardPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        viewBoardPanel.add(viewBoardButton);
+        // Action buttons panel
+        JPanel actionPanel = createActionPanel();
+        gbc.gridy = 4;
+        gbc.insets = new Insets(0, 0, 8, 0);
+        mainPanel.add(actionPanel, gbc);
         
-        // Status label
-        statusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        // Status panel
+        JPanel statusPanelBottom = createStatusPanel();
+        gbc.gridy = 5;
+        gbc.weighty = 1.0;
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.insets = new Insets(0, 0, 0, 0);
+        mainPanel.add(statusPanelBottom, gbc);
         
-        // Add all components with proper spacing
-        mainPanel.add(topButtonsPanel);
-        mainPanel.add(Box.createVerticalStrut(15));
-        mainPanel.add(userInfoLabel);
-        mainPanel.add(Box.createVerticalStrut(20));
-        mainPanel.add(eventLabel);
-        mainPanel.add(Box.createVerticalStrut(8));
-        mainPanel.add(eventDropdown);
-        mainPanel.add(Box.createVerticalStrut(15));
-        mainPanel.add(eventInfoPanel);
-        mainPanel.add(Box.createVerticalStrut(15));
-        mainPanel.add(viewBoardPanel);
-        mainPanel.add(Box.createVerticalStrut(15));
-        mainPanel.add(statusLabel);
-        mainPanel.add(Box.createVerticalGlue());
-        
-        add(headerPanel, BorderLayout.NORTH);
         add(mainPanel, BorderLayout.CENTER);
     }
     
-    private JPanel createHeaderPanel()
+    private JPanel createIconButtonsPanel()
     {
-        JPanel headerPanel = new JPanel(new BorderLayout());
-        headerPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        headerPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(0, 112, 192)),
-            BorderFactory.createEmptyBorder(10, 8, 10, 8)
+        JPanel buttonPanel = new JPanel(new GridLayout(1, 4, 2, 0)); // 4 buttons, 25% each
+        buttonPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        buttonPanel.setPreferredSize(new Dimension(0, 40)); // Remove max width constraint
+        
+        // Create all 4 buttons
+        JButton discordButton = createIconButton("💬", "Discord", new Color(114, 137, 218));
+        JButton websiteButton = createIconButton("🌐", "Website", BUTTON_COLOR);
+        
+        // Add buttons - each takes 25% width
+        buttonPanel.add(discordButton);
+        buttonPanel.add(websiteButton);
+        buttonPanel.add(viewProfileButton);
+        buttonPanel.add(logoutButton);
+        
+        // Set up event handlers for new buttons
+        discordButton.addActionListener(e -> openDiscord());
+        websiteButton.addActionListener(e -> openWebsite());
+        
+        return buttonPanel;
+    }
+    
+    private JPanel createEventSelectionCard()
+    {
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBackground(INFO_PANEL_COLOR);
+        card.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(CARD_BORDER_COLOR, 1),
+            BorderFactory.createEmptyBorder(12, 12, 12, 12)
         ));
         
-        try
-        {
-            // Load clan.bingo header image
-            ImageIcon headerIcon = new ImageIcon(ImageUtil.loadImageResource(getClass(), "/wzd/bingo/clan-bingo-header.png"));
-            JLabel headerLabel = new JLabel(headerIcon);
-            headerLabel.setHorizontalAlignment(SwingConstants.CENTER);
-            headerPanel.add(headerLabel, BorderLayout.CENTER);
-        }
-        catch (Exception e)
-        {
-            // Fallback text header
-            JLabel headerLabel = new JLabel("clan.bingo");
-            headerLabel.setForeground(new Color(0, 112, 192));
-            headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 14f));
-            headerLabel.setHorizontalAlignment(SwingConstants.CENTER);
-            headerPanel.add(headerLabel, BorderLayout.CENTER);
-            log.warn("Could not load header image, using text fallback", e);
-        }
+        // Card title
+        JLabel titleLabel = new JLabel("Active Events");
+        titleLabel.setForeground(ACCENT_COLOR);
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 14f));
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        return headerPanel;
+        // Dropdown with full width
+        eventDropdown.setAlignmentX(Component.LEFT_ALIGNMENT);
+        eventDropdown.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        
+        card.add(titleLabel);
+        card.add(Box.createVerticalStrut(8));
+        card.add(eventDropdown);
+        
+        return card;
+    }
+    
+    private JPanel createEventInfoCard()
+    {
+        JPanel infoCard = new JPanel();
+        infoCard.setLayout(new BoxLayout(infoCard, BoxLayout.Y_AXIS));
+        infoCard.setBackground(INFO_PANEL_COLOR);
+        infoCard.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(CARD_BORDER_COLOR, 1),
+            BorderFactory.createEmptyBorder(12, 12, 12, 12)
+        ));
+        
+        // Card title
+        JLabel titleLabel = new JLabel("Event Details");
+        titleLabel.setForeground(ACCENT_COLOR);
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 14f));
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        // Info grid with improved styling
+        JPanel infoGrid = new JPanel(new GridLayout(5, 1, 0, 6));
+        infoGrid.setBackground(INFO_PANEL_COLOR);
+        infoGrid.add(eventNameLabel);
+        infoGrid.add(totalParticipantsLabel);
+        infoGrid.add(prizePoolLabel);
+        infoGrid.add(timeRemainingLabel);
+        infoGrid.add(totalTilesLabel);
+        
+        infoCard.add(titleLabel);
+        infoCard.add(Box.createVerticalStrut(10));
+        infoCard.add(infoGrid);
+        
+        return infoCard;
+    }
+    
+    private JPanel createActionPanel()
+    {
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        actionPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        actionPanel.add(viewBoardButton);
+        return actionPanel;
+    }
+    
+    private JPanel createStatusPanel()
+    {
+        JPanel statusPanel = new JPanel(new BorderLayout());
+        statusPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        statusPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
+        
+        statusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        statusPanel.add(statusLabel, BorderLayout.CENTER);
+        
+        return statusPanel;
     }
     
     private void setupEventHandlers()
     {
-        // Top action buttons
-        viewProfileButton.addActionListener(e -> openProfilePage());
-        settingsButton.addActionListener(e -> openSettings());
-        logoutButton.addActionListener(e -> handleLogout());
+        // Profile and logout buttons are handled in createIconButtonsPanel
+        // Discord and website buttons are also handled there
         
         // Event dropdown selection
         eventDropdown.addActionListener(e -> {
@@ -311,11 +375,13 @@ public class BingoMainPanel extends PluginPanel
             if (selectedEvent != null && !selectedEvent.isEmpty())
             {
                 updateEventInfo(selectedEvent);
+                showEventDetails(true);
                 viewBoardButton.setEnabled(true);
             }
             else
             {
                 clearEventInfo();
+                showEventDetails(false);
                 viewBoardButton.setEnabled(false);
             }
         });
@@ -338,6 +404,29 @@ public class BingoMainPanel extends PluginPanel
                 }
             }
         });
+        
+        // Profile button handler
+        viewProfileButton.addActionListener(e -> openProfilePage());
+        
+        // Logout button handler  
+        logoutButton.addActionListener(e -> handleLogout());
+    }
+    
+    private void showEventDetails(boolean show)
+    {
+        if (eventInfoPanel != null)
+        {
+            eventInfoPanel.setVisible(show);
+            eventInfoPanel.revalidate();
+            eventInfoPanel.repaint();
+            
+            // Also revalidate the parent container
+            if (eventInfoPanel.getParent() != null)
+            {
+                eventInfoPanel.getParent().revalidate();
+                eventInfoPanel.getParent().repaint();
+            }
+        }
     }
     
     private void openProfilePage()
@@ -353,12 +442,6 @@ public class BingoMainPanel extends PluginPanel
             log.error("Failed to open profile URL", e);
             updateStatus("Failed to open profile page", ERROR_COLOR);
         }
-    }
-    
-    private void openSettings()
-    {
-        // TODO: Implement settings panel
-        updateStatus("Settings panel coming soon", ColorScheme.LIGHT_GRAY_COLOR);
     }
     
     private void handleLogout()
@@ -383,20 +466,29 @@ public class BingoMainPanel extends PluginPanel
     {
         updateStatus("Loading events...", ColorScheme.LIGHT_GRAY_COLOR);
         
+        // Disable interactions while loading
+        eventDropdown.setEnabled(false);
+        viewBoardButton.setEnabled(false);
+        showEventDetails(false);
+        
         new Thread(() -> {
             Optional<JsonObject> eventsData = bingoService.fetchActiveEvents();
             
             SwingUtilities.invokeLater(() -> {
+                // Re-enable interactions
+                eventDropdown.setEnabled(true);
+                
                 if (eventsData.isPresent())
                 {
                     updateEventDropdown(eventsData.get());
-                    updateStatus("Events loaded", SUCCESS_COLOR);
+                    updateStatus("Events loaded successfully", SUCCESS_COLOR);
                 }
                 else
                 {
-                    updateStatus("Failed to load events", ERROR_COLOR);
+                    updateStatus("No events available or connection failed", ERROR_COLOR);
                     eventDropdown.removeAllItems();
                     eventDropdown.addItem(new EventItem("", "No events available", "", 0, 0, 0, false));
+                    showEventDetails(false);
                 }
             });
         }).start();
@@ -406,70 +498,156 @@ public class BingoMainPanel extends PluginPanel
     {
         eventDropdown.removeAllItems();
         
+        // Add placeholder item first
+        eventDropdown.addItem(new EventItem("", "Select an event...", "", 0, 0, 0, false));
+        
         try
         {
+            // Check if this is the expected wrapper format
             boolean hasActiveEvent = eventsData.has("hasActiveEvent") && eventsData.get("hasActiveEvent").getAsBoolean();
             
             if (hasActiveEvent && eventsData.has("activeEvents"))
             {
                 JsonArray activeEvents = eventsData.getAsJsonArray("activeEvents");
-                
-                for (JsonElement eventElement : activeEvents)
-                {
-                    JsonObject event = eventElement.getAsJsonObject();
-                    
-                    String bingoId = event.has("bingoId") ? event.get("bingoId").getAsString() : "";
-                    String name = event.has("name") ? event.get("name").getAsString() : "Unknown Event";
-                    String groupId = event.has("groupId") ? event.get("groupId").getAsString() : "";
-                    int durationDays = event.has("durationDays") ? event.get("durationDays").getAsInt() : 0;
-                    int daysRemaining = event.has("daysRemaining") ? event.get("daysRemaining").getAsInt() : 0;
-                    int totalTiles = event.has("totalTiles") ? event.get("totalTiles").getAsInt() : 25; // Default bingo size
-                    boolean isActive = event.has("isActive") ? event.get("isActive").getAsBoolean() : true;
-                    
-                    EventItem eventItem = new EventItem(bingoId, name, groupId, durationDays, daysRemaining, totalTiles, isActive);
-                    eventDropdown.addItem(eventItem);
-                }
-                
-                // Select first event by default
-                if (eventDropdown.getItemCount() > 0)
-                {
-                    eventDropdown.setSelectedIndex(0);
-                }
+                parseEventArray(activeEvents);
             }
+            // Check if the response is directly an array of events
+            else if (eventsData.has("events"))
+            {
+                JsonArray events = eventsData.getAsJsonArray("events");
+                parseEventArray(events);
+            }
+            // Handle case where the entire response might be an array
             else
             {
-                eventDropdown.addItem(new EventItem("", "No active events", "", 0, 0, 0, false));
+                // Try to see if we can find events in the root object
+                for (String key : eventsData.keySet())
+                {
+                    JsonElement element = eventsData.get(key);
+                    if (element.isJsonArray())
+                    {
+                        parseEventArray(element.getAsJsonArray());
+                        break;
+                    }
+                }
             }
+            
+            // Keep placeholder selected (no event selected by default)
+            eventDropdown.setSelectedIndex(0);
+            showEventDetails(false);
         }
         catch (Exception e)
         {
             log.error("Error processing events data", e);
             eventDropdown.removeAllItems();
             eventDropdown.addItem(new EventItem("", "Error loading events", "", 0, 0, 0, false));
+            showEventDetails(false);
         }
+    }
+    
+    private void parseEventArray(JsonArray events)
+    {
+        for (JsonElement eventElement : events)
+        {
+            JsonObject event = eventElement.getAsJsonObject();
+            
+            // Handle both possible field name formats
+            String bingoId = getStringField(event, "bingoId", "bingoid");
+            String name = getStringField(event, "name", "name");
+            String groupId = getStringField(event, "groupId", "groupid");
+            int durationDays = getIntField(event, "durationDays", "durationdays");
+            boolean isActive = getBooleanField(event, "isActive", "isactive");
+            
+            // Calculate days remaining if we have creation date and duration
+            int daysRemaining = durationDays;
+            if (event.has("createdat") && durationDays > 0)
+            {
+                // This is a simplified calculation - in reality you'd want to parse the date properly
+                daysRemaining = Math.max(0, durationDays - 1); // Simplified for now
+            }
+            
+            int totalTiles = getIntField(event, "totalTiles", "totaltiles", 25); // Default to 25
+            
+            EventItem eventItem = new EventItem(bingoId, name, groupId, durationDays, daysRemaining, totalTiles, isActive);
+            eventDropdown.addItem(eventItem);
+            log.info("Added event to dropdown: {} (Active: {})", name, isActive);
+        }
+    }
+    
+    private String getStringField(JsonObject obj, String primaryKey, String fallbackKey)
+    {
+        if (obj.has(primaryKey))
+        {
+            return obj.get(primaryKey).getAsString();
+        }
+        else if (obj.has(fallbackKey))
+        {
+            return obj.get(fallbackKey).getAsString();
+        }
+        return "";
+    }
+    
+    private int getIntField(JsonObject obj, String primaryKey, String fallbackKey)
+    {
+        return getIntField(obj, primaryKey, fallbackKey, 0);
+    }
+    
+    private int getIntField(JsonObject obj, String primaryKey, String fallbackKey, int defaultValue)
+    {
+        if (obj.has(primaryKey))
+        {
+            return obj.get(primaryKey).getAsInt();
+        }
+        else if (obj.has(fallbackKey))
+        {
+            return obj.get(fallbackKey).getAsInt();
+        }
+        return defaultValue;
+    }
+    
+    private boolean getBooleanField(JsonObject obj, String primaryKey, String fallbackKey)
+    {
+        if (obj.has(primaryKey))
+        {
+            return obj.get(primaryKey).getAsBoolean();
+        }
+        else if (obj.has(fallbackKey))
+        {
+            return obj.get(fallbackKey).getAsBoolean();
+        }
+        return true; // Default to active
     }
     
     private void updateEventInfo(EventItem event)
     {
-        eventNameLabel.setText("Event: " + event.getName());
-        totalParticipantsLabel.setText("Participants: Loading..."); // TODO: Get from API
-        prizePoolLabel.setText("Prize Pool: TBD"); // TODO: Get from API
-        timeRemainingLabel.setText("Days Remaining: " + event.getDaysRemaining());
-        totalTilesLabel.setText("Total Tiles: " + event.getTotalTiles());
+        eventNameLabel.setText("📅 " + event.getName());
+        totalParticipantsLabel.setText("👥 Participants: Loading...");
+        prizePoolLabel.setText("💰 Prize Pool: TBD");
+        timeRemainingLabel.setText("⏰ Days Remaining: " + event.getDaysRemaining());
+        totalTilesLabel.setText("🎯 Total Tiles: " + event.getTotalTiles());
+        
+        // Enable the view board button with modern styling
+        viewBoardButton.setEnabled(true);
+        viewBoardButton.setBackground(ACCENT_COLOR);
     }
     
     private void clearEventInfo()
     {
-        eventNameLabel.setText("No event selected");
-        totalParticipantsLabel.setText("Participants: -");
-        prizePoolLabel.setText("Prize Pool: -");
-        timeRemainingLabel.setText("Time Remaining: -");
-        totalTilesLabel.setText("Total Tiles: -");
+        eventNameLabel.setText("📅 Select an event to view details");
+        totalParticipantsLabel.setText("👥 Participants: -");
+        prizePoolLabel.setText("💰 Prize Pool: -");
+        timeRemainingLabel.setText("⏰ Time Remaining: -");
+        totalTilesLabel.setText("🎯 Total Tiles: -");
+        
+        // Disable the view board button and hide details
+        viewBoardButton.setEnabled(false);
+        viewBoardButton.setBackground(ColorScheme.MEDIUM_GRAY_COLOR);
+        showEventDetails(false);
     }
     
     private void updateStatus(String message, Color color)
     {
-        statusLabel.setText(message);
+        statusLabel.setText("ℹ️ " + message);
         statusLabel.setForeground(color);
     }
     
@@ -487,6 +665,37 @@ public class BingoMainPanel extends PluginPanel
             eventRefreshTimer.stop();
         }
         log.info("BingoMainPanel shutdown complete");
+    }
+    
+    private void openDiscord()
+    {
+        try
+        {
+            // Open Discord invite or server link
+            String discordUrl = "https://discord.gg/clanbingo"; // Replace with actual Discord invite
+            Desktop.getDesktop().browse(URI.create(discordUrl));
+            log.info("Opened Discord URL: {}", discordUrl);
+        }
+        catch (IOException e)
+        {
+            log.error("Failed to open Discord URL", e);
+            updateStatus("Failed to open Discord", ERROR_COLOR);
+        }
+    }
+    
+    private void openWebsite()
+    {
+        try
+        {
+            String websiteUrl = config.siteUrl();
+            Desktop.getDesktop().browse(URI.create(websiteUrl));
+            log.info("Opened website URL: {}", websiteUrl);
+        }
+        catch (IOException e)
+        {
+            log.error("Failed to open website URL", e);
+            updateStatus("Failed to open website", ERROR_COLOR);
+        }
     }
     
     // Event item class for dropdown
@@ -531,7 +740,7 @@ public class BingoMainPanel extends PluginPanel
         }
     }
     
-    // Custom renderer for event dropdown
+    // Enhanced Custom renderer for event dropdown
     private static class EventItemRenderer extends DefaultListCellRenderer
     {
         @Override
@@ -542,16 +751,54 @@ public class BingoMainPanel extends PluginPanel
             if (value instanceof EventItem)
             {
                 EventItem event = (EventItem) value;
-                setText(event.toString());
                 
-                if (!event.isEmpty() && event.isActive())
+                if (event.isEmpty())
                 {
-                    setForeground(isSelected ? Color.WHITE : SUCCESS_COLOR);
+                    // Handle placeholder and error states
+                    if (event.getName().equals("Select an event..."))
+                    {
+                        setText("▼ " + event.getName());
+                        setForeground(isSelected ? Color.WHITE : ColorScheme.LIGHT_GRAY_COLOR);
+                    }
+                    else if (event.getName().contains("No") || event.getName().contains("Error"))
+                    {
+                        setText("⚠️ " + event.getName());
+                        setForeground(isSelected ? Color.WHITE : ColorScheme.LIGHT_GRAY_COLOR);
+                    }
+                    else
+                    {
+                        setText(event.getName());
+                        setForeground(isSelected ? Color.WHITE : ColorScheme.LIGHT_GRAY_COLOR);
+                    }
                 }
                 else
                 {
-                    setForeground(isSelected ? Color.WHITE : ColorScheme.LIGHT_GRAY_COLOR);
+                    String prefix = event.isActive() ? "🟢 " : "🔴 ";
+                    setText(prefix + event.toString());
+                    
+                    if (event.isActive())
+                    {
+                        setForeground(isSelected ? Color.WHITE : SUCCESS_COLOR);
+                    }
+                    else
+                    {
+                        setForeground(isSelected ? Color.WHITE : ColorScheme.LIGHT_GRAY_COLOR);
+                    }
                 }
+            }
+            
+            // Enhanced styling
+            setFont(getFont().deriveFont(12f));
+            setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+            setOpaque(true);
+            
+            if (isSelected)
+            {
+                setBackground(ACCENT_COLOR);
+            }
+            else
+            {
+                setBackground(INFO_PANEL_COLOR);
             }
             
             return this;

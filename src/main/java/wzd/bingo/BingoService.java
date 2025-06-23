@@ -464,32 +464,58 @@ public class BingoService
             .url(apiEndpoint)
             .get()
             .addHeader("Authorization", "Bearer " + config.jwtToken())
+            .addHeader("Accept", "application/json")
+            .addHeader("Content-Type", "application/json")
             .build();
         
         try (Response response = httpClient.newCall(request).execute())
         {
             if (response.isSuccessful() && response.body() != null)
             {
-                String responseJson = response.body().string();
-                log.debug("Active events API response: {}", responseJson);
+                String responseBody = response.body().string();
+                log.info("Active events API response body: {}", responseBody);
                 
-                // Check if response is empty or just a simple string
-                if (responseJson == null || responseJson.trim().isEmpty())
+                // Check if response is empty
+                if (responseBody == null || responseBody.trim().isEmpty())
                 {
                     log.warn("Empty response from active events API");
                     return Optional.empty();
                 }
                 
-                // Try to parse as JsonObject, handle different response formats
+                // Check if response is HTML (common when API returns error pages)
+                String trimmedResponse = responseBody.trim();
+                if (trimmedResponse.startsWith("<!") || trimmedResponse.startsWith("<html"))
+                {
+                    log.error("API returned HTML instead of JSON. This usually indicates the API endpoint is not available or there's a server configuration issue.");
+                    log.error("Response preview: {}", trimmedResponse.length() > 200 ? trimmedResponse.substring(0, 200) + "..." : trimmedResponse);
+                    return Optional.empty();
+                }
+                
+                // Try to parse as JSON
                 try
                 {
-                    JsonElement element = gson.fromJson(responseJson, JsonElement.class);
+                    JsonElement element = gson.fromJson(responseBody, JsonElement.class);
+                    
+                    if (element == null)
+                    {
+                        log.warn("JSON parsing returned null for response: {}", responseBody);
+                        return Optional.empty();
+                    }
                     
                     if (element.isJsonObject())
                     {
                         JsonObject eventsData = element.getAsJsonObject();
-                        log.info("Successfully fetched active events data");
+                        log.info("Successfully fetched active events data as object");
                         return Optional.of(eventsData);
+                    }
+                    else if (element.isJsonArray())
+                    {
+                        // If array is returned directly, wrap it in an object
+                        log.info("API returned array directly, wrapping in object");
+                        JsonObject wrappedResponse = new JsonObject();
+                        wrappedResponse.addProperty("hasActiveEvent", element.getAsJsonArray().size() > 0);
+                        wrappedResponse.add("events", element.getAsJsonArray());
+                        return Optional.of(wrappedResponse);
                     }
                     else if (element.isJsonPrimitive())
                     {
@@ -508,7 +534,9 @@ public class BingoService
                 }
                 catch (Exception jsonException)
                 {
-                    log.error("Failed to parse active events JSON response: {}", responseJson, jsonException);
+                    log.error("Failed to parse JSON response from active events API", jsonException);
+                    log.error("Response body that failed to parse: {}", responseBody);
+                    
                     // Return mock empty response to prevent UI crashes
                     JsonObject mockResponse = new JsonObject();
                     mockResponse.addProperty("hasActiveEvent", false);
@@ -523,14 +551,35 @@ public class BingoService
                 configManager.setConfiguration("bingo", "isAuthenticated", false);
                 return Optional.empty();
             }
+            else if (response.code() == 404)
+            {
+                log.warn("Active events API endpoint not found (404). Check API configuration.");
+                return Optional.empty();
+            }
             else
             {
-                log.warn("Failed to fetch active events: HTTP {}", response.code());
+                log.warn("Failed to fetch active events: HTTP {} - {}", response.code(), response.message());
+                if (response.body() != null)
+                {
+                    try 
+                    {
+                        String errorBody = response.body().string();
+                        log.warn("Error response body: {}", errorBody.length() > 500 ? errorBody.substring(0, 500) + "..." : errorBody);
+                    }
+                    catch (Exception e)
+                    {
+                        log.warn("Could not read error response body", e);
+                    }
+                }
             }
         }
         catch (IOException e)
         {
-            log.error("Active events request failed", e);
+            log.error("Network error during active events request", e);
+        }
+        catch (Exception e)
+        {
+            log.error("Unexpected error during active events request", e);
         }
         
         return Optional.empty();

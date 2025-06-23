@@ -1,174 +1,407 @@
 package wzd.bingo;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.util.ImageUtil;
+import okhttp3.*;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import javax.swing.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Base64;
 import java.util.Optional;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import javax.imageio.ImageIO;
 
 @Slf4j
 @Singleton
 public class BingoService
 {
+    private static final String CONTENT_TYPE_JSON = "application/json";
+    private static final int HEARTBEAT_INTERVAL_SECONDS = 60;
+    
     @Inject
     private BingoConfig config;
+    
+    @Inject
+    private ConfigManager configManager;
+    
+    @Inject
+    private OkHttpClient httpClient;
+    
+    private final Gson gson = new Gson();
+    private ScheduledExecutorService heartbeatExecutor;
+    private volatile boolean isAuthenticated = false;
 
     /**
-     * Authenticate user with a token generated from the website
+     * Authenticate user with Discord ID and RSN
      * @param rsn The RuneScape username (auto-detected from client)
-     * @param token The authentication token from the website
+     * @param discordId The Discord user ID for authentication
      * @return Optional containing success message if authentication successful
+     */
+    public Optional<String> authenticateWithDiscord(String rsn, String discordId)
+    {
+        log.info("Attempting authentication for RSN: {} with Discord ID: {}", rsn, discordId);
+        
+        String apiEndpoint = config.authApiUrl() + "/api/auth/login";
+        
+        // Create request body
+        JsonObject requestBody = new JsonObject();
+        requestBody.addProperty("rsn", rsn);
+        requestBody.addProperty("discordId", discordId);
+        
+        RequestBody body = RequestBody.create(
+            MediaType.get(CONTENT_TYPE_JSON),
+            gson.toJson(requestBody)
+        );
+        
+        Request request = new Request.Builder()
+            .url(apiEndpoint)
+            .post(body)
+            .addHeader("Content-Type", CONTENT_TYPE_JSON)
+            .build();
+        
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (response.isSuccessful() && response.body() != null)
+            {
+                String responseJson = response.body().string();
+                JsonObject responseObj = gson.fromJson(responseJson, JsonObject.class);
+                
+                // Extract authentication data
+                String token = responseObj.get("token").getAsString();
+                JsonObject user = responseObj.getAsJsonObject("user");
+                String teamId = user.get("teamId").getAsString();
+                
+                // Store authentication data
+                configManager.setConfiguration("bingo", "jwtToken", token);
+                configManager.setConfiguration("bingo", "rsn", rsn);
+                configManager.setConfiguration("bingo", "discordId", discordId);
+                configManager.setConfiguration("bingo", "teamId", teamId);
+                
+                isAuthenticated = true;
+                log.info("Authentication successful for RSN: {} (Team: {})", rsn, teamId);
+                return Optional.of("Authentication successful");
+            }
+            else
+            {
+                log.warn("Authentication failed: HTTP {}", response.code());
+                if (response.body() != null)
+                {
+                    log.warn("Error response: {}", response.body().string());
+                }
+            }
+        }
+        catch (IOException e)
+        {
+            log.error("Authentication request failed", e);
+        }
+        
+        return Optional.empty();
+    }
+
+    /**
+     * Legacy method for backward compatibility
      */
     public Optional<String> authenticateWithToken(String rsn, String token)
     {
-        log.info("Attempting plugin authentication for RSN: {} using API: {}", rsn, config.authApiUrl());
+        // For backward compatibility, treat the "token" as discordId
+        return authenticateWithDiscord(rsn, token);
+    }
+
+    /**
+     * Fetch user's bingo board data
+     * @param rsn The RuneScape username
+     * @return Optional containing board data if successful
+     */
+    public Optional<JsonObject> fetchBoardData(String rsn)
+    {
+        String apiEndpoint = config.authApiUrl() + "/api/bingo/board/" + rsn;
         
-        // API endpoint: {authApiUrl}/api/auth/login
-        // POST request with RSN and token for plugin authentication
-        String apiEndpoint = config.authApiUrl() + "/api/auth/login";
-        log.debug("Authentication endpoint: {}", apiEndpoint);
+        Request request = new Request.Builder()
+            .url(apiEndpoint)
+            .get()
+            .addHeader("Authorization", "Bearer " + config.jwtToken())
+            .build();
         
-        if (rsn != null && !rsn.trim().isEmpty() && token != null && !token.trim().isEmpty())
+        try (Response response = httpClient.newCall(request).execute())
         {
-            // TODO: Replace with actual HTTP POST request to apiEndpoint
-            // Request body should include: {"rsn": rsn, "token": token, "type": "plugin"}
-            // Expected response: {"success": true, "message": "Authentication successful", "userId": "...", "teamId": "..."}
-            
-            // Mock authentication - replace with actual API call
-            if (token.length() >= 8) // Basic validation
+            if (response.isSuccessful() && response.body() != null)
             {
-                log.info("Plugin authentication successful for RSN: {} via {}", rsn, apiEndpoint);
-                return Optional.of("Authentication successful");
+                String responseJson = response.body().string();
+                JsonObject boardData = gson.fromJson(responseJson, JsonObject.class);
+                log.info("Successfully fetched board data for RSN: {}", rsn);
+                return Optional.of(boardData);
+            }
+            else if (response.code() == 401)
+            {
+                log.warn("JWT token expired, authentication required");
+                isAuthenticated = false;
+                return Optional.empty();
+            }
+            else
+            {
+                log.warn("Failed to fetch board data: HTTP {}", response.code());
             }
         }
+        catch (IOException e)
+        {
+            log.error("Board data request failed", e);
+        }
         
-        log.warn("Plugin authentication failed for RSN: {} via {}", rsn, apiEndpoint);
         return Optional.empty();
     }
 
     /**
-     * Legacy login method - deprecated, use authenticateWithToken instead
-     * @deprecated Use authenticateWithToken(String, String) instead
+     * Fetch team progress and statistics
+     * @param teamId The team ID
+     * @return Optional containing team data if successful
      */
-    @Deprecated
-    public Optional<String> login(String rsn)
-    {
-        log.warn("Deprecated login method called - use authenticateWithToken instead");
-        return Optional.empty();
-    }
-
-    /**
-     * Initialize the service after authentication
-     * This method should fetch board data and team information
-     */
-    public void initialize()
-    {
-        String token = config.authToken();
-        String rsn = config.rsn();
-        
-        if (token != null && !token.isEmpty() && rsn != null && !rsn.isEmpty())
-        {
-            log.info("Initializing Bingo service for user: {} using API: {}", rsn, config.authApiUrl());
-            // Fetch board and team data using the authenticated token
-            fetchBoardData(rsn);
-            // TODO: Fetch team data when teamId is available from authentication response
-            startHeartbeat();
-        }
-        else
-        {
-            log.warn("Cannot initialize Bingo service - missing auth token or RSN");
-        }
-    }
-
-    /**
-     * Fetch bingo board data for the authenticated user
-     * @param rsn The RuneScape username
-     */
-    private void fetchBoardData(String rsn)
-    {
-        // API endpoint: {authApiUrl}/api/bingo/board/:rsn
-        String apiEndpoint = config.authApiUrl() + "/api/bingo/board/" + rsn;
-        String token = config.authToken();
-        
-        log.info("Fetching bingo board data from {} with token: {}...", 
-            apiEndpoint, token != null ? token.substring(0, Math.min(8, token.length())) : "null");
-        
-        // TODO: Implement HTTP GET request to apiEndpoint with Authorization header
-        // Expected response: {"board": {...}, "progress": {...}, "objectives": [...]}
-    }
-
-    /**
-     * Fetch team data and statistics
-     * @param teamId The team ID (obtained from authentication response)
-     */
-    public void fetchTeamData(String teamId)
+    public Optional<JsonObject> fetchTeamData(String teamId)
     {
         if (teamId == null || teamId.isEmpty())
         {
             log.warn("Cannot fetch team data - no team ID provided");
-            return;
+            return Optional.empty();
         }
         
-        // API endpoint: {authApiUrl}/api/bingo/team/:teamId
         String apiEndpoint = config.authApiUrl() + "/api/bingo/team/" + teamId;
-        String token = config.authToken();
         
-        log.info("Fetching team data from {} with token: {}...", 
-            apiEndpoint, token != null ? token.substring(0, Math.min(8, token.length())) : "null");
+        Request request = new Request.Builder()
+            .url(apiEndpoint)
+            .get()
+            .addHeader("Authorization", "Bearer " + config.jwtToken())
+            .build();
         
-        // TODO: Implement HTTP GET request to apiEndpoint with Authorization header
-        // Expected response: {"team": {...}, "members": [...], "progress": {...}}
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (response.isSuccessful() && response.body() != null)
+            {
+                String responseJson = response.body().string();
+                JsonObject teamData = gson.fromJson(responseJson, JsonObject.class);
+                log.info("Successfully fetched team data for team: {}", teamId);
+                return Optional.of(teamData);
+            }
+            else if (response.code() == 401)
+            {
+                log.warn("JWT token expired, authentication required");
+                isAuthenticated = false;
+                return Optional.empty();
+            }
+            else
+            {
+                log.warn("Failed to fetch team data: HTTP {}", response.code());
+            }
+        }
+        catch (IOException e)
+        {
+            log.error("Team data request failed", e);
+        }
+        
+        return Optional.empty();
     }
 
     /**
      * Submit tile completion with evidence
      * @param tileId The ID of the completed tile
-     * @param evidence Evidence data (screenshot, game state, etc.)
+     * @param method The completion method (drop, action, etc.)
+     * @param evidenceText Text description of the evidence
+     * @param screenshot Screenshot as BufferedImage
      * @return true if submission was successful
      */
-    public boolean submitTileCompletion(String tileId, Object evidence)
+    public boolean submitTileCompletion(String tileId, String method, String evidenceText, BufferedImage screenshot)
     {
-        // API endpoint: {authApiUrl}/api/bingo/submit
         String apiEndpoint = config.authApiUrl() + "/api/bingo/submit";
-        String token = config.authToken();
         String rsn = config.rsn();
         
-        log.info("Submitting tile completion for tile {} by {} to {}", tileId, rsn, apiEndpoint);
+        try
+        {
+            // Convert screenshot to base64
+            String screenshotBase64 = convertImageToBase64(screenshot);
+            
+            // Create request body
+            JsonObject requestBody = new JsonObject();
+            requestBody.addProperty("rsn", rsn);
+            requestBody.addProperty("tileId", tileId);
+            requestBody.addProperty("method", method);
+            requestBody.addProperty("evidenceText", evidenceText);
+            requestBody.addProperty("timestamp", System.currentTimeMillis() / 1000);
+            requestBody.addProperty("screenshot", screenshotBase64);
+            
+            RequestBody body = RequestBody.create(
+                MediaType.get(CONTENT_TYPE_JSON),
+                gson.toJson(requestBody)
+            );
+            
+            Request request = new Request.Builder()
+                .url(apiEndpoint)
+                .post(body)
+                .addHeader("Authorization", "Bearer " + config.jwtToken())
+                .addHeader("Content-Type", CONTENT_TYPE_JSON)
+                .build();
+            
+            try (Response response = httpClient.newCall(request).execute())
+            {
+                if (response.isSuccessful() && response.body() != null)
+                {
+                    String responseJson = response.body().string();
+                    JsonObject responseObj = gson.fromJson(responseJson, JsonObject.class);
+                    String status = responseObj.get("status").getAsString();
+                    
+                    if ("ok".equals(status))
+                    {
+                        log.info("Successfully submitted tile completion: {}", tileId);
+                        return true;
+                    }
+                }
+                else if (response.code() == 401)
+                {
+                    log.warn("JWT token expired during tile submission");
+                    isAuthenticated = false;
+                }
+                else
+                {
+                    log.warn("Failed to submit tile completion: HTTP {}", response.code());
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            log.error("Tile submission failed", e);
+        }
         
-        // TODO: Implement HTTP POST request to apiEndpoint
-        // Request body: {"rsn": rsn, "tileId": tileId, "evidence": evidence, "timestamp": "..."}
-        // Authorization header with token
-        // Expected response: {"success": true, "points": 10, "newProgress": {...}}
-        
-        // Mock submission - replace with actual API call
-        return true;
+        return false;
     }
 
     /**
-     * Start sending periodic heartbeat to maintain connection
-     */
-    private void startHeartbeat()
-    {
-        // TODO: Implement periodic heartbeat using Timer or ScheduledExecutorService
-        log.info("Starting heartbeat service...");
-        // sendHeartbeat() should be called every 30-60 seconds
-    }
-
-    /**
-     * Send user activity heartbeat to server
+     * Send heartbeat to maintain connection
      */
     public void sendHeartbeat()
     {
-        // API endpoint: {authApiUrl}/api/bingo/heartbeat
         String apiEndpoint = config.authApiUrl() + "/api/bingo/heartbeat";
-        String token = config.authToken();
         String rsn = config.rsn();
         
-        log.debug("Sending heartbeat for {} to {}", rsn, apiEndpoint);
+        if (rsn == null || rsn.isEmpty() || config.jwtToken().isEmpty())
+        {
+            return; // Not authenticated
+        }
         
-        // TODO: Implement HTTP POST request to apiEndpoint
-        // Request body: {"rsn": rsn, "timestamp": "...", "status": "active"}
-        // Authorization header with token
-        // Expected response: {"success": true, "serverTime": "..."}
+        // Create request body
+        JsonObject requestBody = new JsonObject();
+        requestBody.addProperty("rsn", rsn);
+        requestBody.addProperty("timestamp", System.currentTimeMillis() / 1000);
+        
+        RequestBody body = RequestBody.create(
+            MediaType.get(CONTENT_TYPE_JSON),
+            gson.toJson(requestBody)
+        );
+        
+        Request request = new Request.Builder()
+            .url(apiEndpoint)
+            .post(body)
+            .addHeader("Authorization", "Bearer " + config.jwtToken())
+            .addHeader("Content-Type", CONTENT_TYPE_JSON)
+            .build();
+        
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (response.isSuccessful())
+            {
+                log.debug("Heartbeat sent successfully for RSN: {}", rsn);
+            }
+            else if (response.code() == 401)
+            {
+                log.warn("JWT token expired during heartbeat");
+                isAuthenticated = false;
+                stopHeartbeat();
+            }
+            else
+            {
+                log.warn("Heartbeat failed: HTTP {}", response.code());
+            }
+        }
+        catch (IOException e)
+        {
+            log.error("Heartbeat request failed", e);
+        }
+    }
+
+    /**
+     * Start sending periodic heartbeats
+     */
+    public void startHeartbeat()
+    {
+        if (heartbeatExecutor == null || heartbeatExecutor.isShutdown())
+        {
+            heartbeatExecutor = new ScheduledThreadPoolExecutor(1);
+            heartbeatExecutor.scheduleAtFixedRate(
+                this::sendHeartbeat,
+                HEARTBEAT_INTERVAL_SECONDS,
+                HEARTBEAT_INTERVAL_SECONDS,
+                TimeUnit.SECONDS
+            );
+            log.info("Started heartbeat service ({}s interval)", HEARTBEAT_INTERVAL_SECONDS);
+        }
+    }
+
+    /**
+     * Stop heartbeat service
+     */
+    public void stopHeartbeat()
+    {
+        if (heartbeatExecutor != null && !heartbeatExecutor.isShutdown())
+        {
+            heartbeatExecutor.shutdown();
+            log.info("Stopped heartbeat service");
+        }
+    }
+
+    /**
+     * Initialize the service after authentication
+     */
+    public void initialize()
+    {
+        String token = config.jwtToken();
+        String rsn = config.rsn();
+        
+        if (token != null && !token.isEmpty() && rsn != null && !rsn.isEmpty())
+        {
+            log.info("Initializing Bingo service for user: {}", rsn);
+            isAuthenticated = true;
+            
+            // Start background services
+            startHeartbeat();
+            
+            // Fetch initial data on background thread
+            new Thread(() -> {
+                fetchBoardData(rsn);
+                String teamId = config.teamId();
+                if (teamId != null && !teamId.isEmpty())
+                {
+                    fetchTeamData(teamId);
+                }
+            }).start();
+        }
+        else
+        {
+            log.warn("Cannot initialize Bingo service - missing JWT token or RSN");
+        }
+    }
+
+    /**
+     * Shutdown the service
+     */
+    public void shutdown()
+    {
+        stopHeartbeat();
+        isAuthenticated = false;
+        log.info("Bingo service shutdown complete");
     }
 
     /**
@@ -176,9 +409,26 @@ public class BingoService
      */
     public boolean isAuthenticated()
     {
-        String token = config.authToken();
-        String rsn = config.rsn();
-        return token != null && !token.isEmpty() && rsn != null && !rsn.isEmpty();
+        return isAuthenticated && config.jwtToken() != null && !config.jwtToken().isEmpty();
+    }
+
+    /**
+     * Convert BufferedImage to base64 string
+     */
+    private String convertImageToBase64(BufferedImage image)
+    {
+        try
+        {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(image, "png", baos);
+            byte[] imageBytes = baos.toByteArray();
+            return Base64.getEncoder().encodeToString(imageBytes);
+        }
+        catch (IOException e)
+        {
+            log.error("Failed to convert image to base64", e);
+            return "";
+        }
     }
 
     /**
@@ -195,5 +445,15 @@ public class BingoService
     public String getProfileUrl()
     {
         return config.profileUrl();
+    }
+
+    /**
+     * Legacy login method - deprecated
+     */
+    @Deprecated
+    public Optional<String> login(String rsn)
+    {
+        log.warn("Deprecated login method called - use authenticateWithDiscord instead");
+        return Optional.empty();
     }
 } 

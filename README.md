@@ -1,209 +1,226 @@
 # Bingo Plugin for RuneLite
 
-A RuneLite plugin that integrates with the **clan.bingo** website to provide real-time OSRS Bingo gameplay with team collaboration features.
+A RuneLite plugin that integrates with the **clan.bingo** platform for OSRS Bingo competitions. This plugin enables automatic tile completion detection, team progress tracking, and seamless authentication with the clan.bingo backend.
 
-## 🎯 What is Bingo?
+## Features
 
-OSRS Bingo is a competitive game mode where players race to complete objectives arranged in a grid format. Players can compete individually or in teams to achieve lines, patterns, or full board completion.
+### 🔐 Authentication & Security
+- **Discord ID Authentication**: Secure login using your Discord user ID
+- **JWT Token Management**: Automatic token handling with refresh capabilities
+- **Auto-RSN Detection**: Automatically detects your RuneScape username when logged in
+- **Secure Configuration**: Sensitive data stored securely in RuneLite configuration
 
-## ✨ Features
+### 📊 Bingo Board Integration
+- **Real-time Board Sync**: Automatically fetches your current bingo board state
+- **Team Progress Tracking**: View your team's overall progress and member statistics
+- **Tile Completion Detection**: Automatic detection of completed objectives
+- **Evidence Submission**: Screenshot capture and submission for tile completions
 
-- **Automatic RSN Detection**: No need to manually enter your username - the plugin detects it when you're logged into OSRS
-- **Secure Token Authentication**: Link your RuneLite client to your clan.bingo account using website-generated tokens
-- **Real-time Board Sync**: Your bingo board and progress sync automatically between the plugin and website
-- **Team Collaboration**: View team member progress and coordinate strategies
-- **Progress Tracking**: Automatic detection of completed objectives based on your in-game actions
-- **Cross-platform**: Works seamlessly with the clan.bingo web interface
+### 🌐 Network Features
+- **HTTP Client**: Full OkHttp integration with proper request/response handling
+- **Heartbeat System**: Maintains connection with 60-second intervals
+- **Network Resilience**: Automatic retry logic and graceful failure handling
+- **Background Processing**: All network operations run on background threads
 
-## 🚀 Quick Start
+### 🎨 User Interface
+- **clan.bingo Branding**: Professional UI with official branding
+- **RuneLite Theme Integration**: Consistent with RuneLite's dark theme
+- **Status Indicators**: Visual feedback for authentication and connection states
+- **Responsive Design**: Compact layout optimized for the RuneLite sidebar
 
-### 1. Installation
+## Installation
 
-1. Download the latest plugin JAR from the releases page
-2. Place it in your RuneLite plugins folder
-3. Restart RuneLite
-4. The Bingo plugin will appear in your plugin list
+1. **Download the Plugin**
+   - Clone this repository or download the latest release
+   - Place in your RuneLite plugins directory
 
-### 2. Authentication Setup
+2. **Build the Plugin** (if from source)
+   ```bash
+   ./gradlew build
+   ```
 
-1. **Create Account**: Visit [clan.bingo](https://clan.bingo) and create an account
-2. **Generate Token**: 
-   - Log into your clan.bingo account
-   - Navigate to "Plugin Integration" or "Generate Token"
-   - Click "Generate New Token"
-   - Copy the generated token (64-character string)
-3. **Link Plugin**:
-   - Launch OSRS and log into your account
-   - Open the Bingo plugin panel (blue "B" icon in RuneLite sidebar)
-   - Paste your token into the "Authentication Token" field
-   - Click "Link Account"
+3. **Enable in RuneLite**
+   - Start RuneLite
+   - Go to Configuration → Plugin Hub → Local Plugins
+   - Enable the "Bingo" plugin
 
-### 3. Start Playing
+## Authentication Setup
 
-Once authenticated, the plugin will:
-- Automatically download your active bingo board
-- Sync your team information
-- Track objective completion in real-time
-- Update your progress on the website
+### Step 1: Get Your Discord ID
+1. Open Discord and go to User Settings (gear icon)
+2. Go to Advanced → Enable Developer Mode
+3. Right-click your username and select "Copy User ID"
+4. Save this ID - it's your unique Discord identifier (17-19 digits)
 
-## 🔧 How It Works
+### Step 2: Link Your Account
+1. **Log into OSRS first** - Your RSN will be auto-detected
+2. Open the Bingo plugin panel in RuneLite (sidebar)
+3. Enter your Discord ID in the authentication form
+4. Click "Link Account" to authenticate
+5. Visit the profile page to manage your account settings
 
-### Authentication Flow
+### Step 3: Join a Team
+- Visit [clan.bingo](https://clan.bingo) to create or join a team
+- Your team progress will automatically sync with the plugin
 
-```
-1. User creates account on clan.bingo website
-2. User generates authentication token on website
-3. User enters token in RuneLite plugin
-4. Plugin validates token with clan.bingo API
-5. Token is linked to user's RSN (auto-detected)
-6. Plugin downloads board and team data
-7. Real-time sync begins
-```
+## API Integration
 
-### Data Synchronization
+The plugin integrates with the clan.bingo backend through the following endpoints:
 
-The plugin maintains a persistent connection with the clan.bingo servers to:
-- **Download**: Bingo boards, team rosters, current objectives
-- **Upload**: Completed objectives, progress updates, location data
-- **Real-time**: Team member progress, chat messages, strategy updates
+### Authentication
+- **POST** `/api/auth/login` - Discord ID + RSN authentication
+- Returns JWT token for subsequent requests
 
-## 🌐 Website Integration
+### Bingo Data
+- **GET** `/api/bingo/board/:rsn` - Fetch user's bingo board
+- **GET** `/api/bingo/team/:teamId` - Get team progress and statistics
 
-### clan.bingo Website Features
+### Tile Management
+- **POST** `/api/bingo/submit` - Submit tile completion with evidence
+- Includes screenshot, timestamp, and completion method
 
-- **Board Creation**: Create custom bingo boards with various objective types
-- **Team Management**: Form teams, invite players, manage permissions
-- **Live Tracking**: Real-time view of all team member progress
-- **Statistics**: Detailed analytics and completion history
-- **Leaderboards**: Competition rankings and achievements
+### Connection Management
+- **POST** `/api/bingo/heartbeat` - Maintain active connection
+- Sent every 60 seconds while authenticated
 
-### API Endpoints Used
+## Configuration
 
-The plugin communicates with these clan.bingo API endpoints:
-- `POST /api/authenticate-token` - Token validation and account linking
-- `GET /api/board/{id}` - Download bingo board data
-- `GET /api/team/{id}` - Fetch team information
-- `POST /api/progress` - Upload objective completion
-- `WebSocket /ws/live` - Real-time updates
+The plugin provides several configuration options:
 
-## 🔒 Security & Privacy
+### URLs
+- **Profile URL**: Link to your clan.bingo profile page
+- **API Base URL**: Backend API endpoint (configurable for different environments)
 
-### Token Security
-- **Unique Tokens**: Each token is cryptographically generated (256-bit entropy)
-- **Expiration**: Tokens expire after 24-48 hours
-- **Single Use**: Tokens can only be linked to one RSN
-- **Revocation**: Tokens can be revoked instantly from the website
+### Authentication
+- **Discord ID**: Your Discord user identifier
+- **RSN**: Auto-detected RuneScape username
+- **JWT Token**: Automatically managed authentication token
+
+## Security & Privacy
 
 ### Data Protection
-- **Minimal Data**: Only necessary game data is transmitted
-- **Encryption**: All communication uses HTTPS/WSS
-- **Local Storage**: Sensitive data is stored securely in RuneLite config
-- **No Passwords**: Plugin never handles your clan.bingo password
+- **Local Storage**: Sensitive data stored only in RuneLite's secure configuration
+- **Encrypted Transport**: All API communications use HTTPS
+- **Token Security**: JWT tokens are automatically managed and refreshed
 
-## 🛠️ Configuration
+### Privacy Features
+- **No Chat Monitoring**: Plugin does not read or store chat messages
+- **Minimal Data Collection**: Only collects necessary bingo completion data
+- **User Control**: Complete control over what data is submitted
 
-### Plugin Settings
+### Permission Model
+- **Read-Only Game State**: Plugin only reads public game information
+- **Screenshot Permission**: Only captures screenshots when tiles are completed
+- **Network Access**: Only communicates with authorized clan.bingo servers
 
-Access plugin settings through RuneLite's configuration panel:
+## Troubleshooting
 
-- **Auto-sync Interval**: How often to sync with the server (default: 30 seconds)
-- **Notification Settings**: Configure alerts for team updates
-- **Privacy Mode**: Limit what data is shared with team members
-- **Debug Logging**: Enable detailed logging for troubleshooting
+### Authentication Issues
+- **"Invalid Discord ID"**: Ensure your Discord ID is 17-19 digits long
+- **"Authentication Failed"**: Verify your Discord ID is correct and try again
+- **"Must be logged in first"**: Log into OSRS before attempting authentication
 
-### Config File Location
+### Connection Problems
+- **Network Errors**: Check your internet connection and firewall settings
+- **API Timeouts**: The plugin will automatically retry failed requests
+- **Token Expiration**: Authentication tokens refresh automatically
+
+### Common Solutions
+1. **Restart RuneLite** if the plugin panel doesn't appear
+2. **Check Configuration** in RuneLite settings → Bingo
+3. **Clear Authentication** by removing the Discord ID and re-authenticating
+4. **Check Logs** in RuneLite console for detailed error information
+
+## Development
+
+### Requirements
+- **Java 11+**
+- **Gradle 8.0+**
+- **RuneLite Development Environment**
+
+### Building from Source
+```bash
+# Clone the repository
+git clone https://github.com/your-username/BingoPlugin.git
+cd BingoPlugin
+
+# Build the plugin
+./gradlew build
+
+# Run with RuneLite (development)
+./gradlew runClient
 ```
-%USERPROFILE%\.runelite\settings.properties (Windows)
-~/.runelite/settings.properties (Linux/Mac)
+
+### Project Structure
+```
+src/main/java/wzd/bingo/
+├── BingoPlugin.java          # Main plugin class
+├── BingoConfig.java          # Configuration interface
+├── BingoService.java         # HTTP client and API integration
+└── ui/
+    └── AuthPanel.java        # Authentication UI panel
 ```
 
-## 🎮 Gameplay Features
+### Contributing
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-### Objective Types
-- **Skill Levels**: Reach specific skill levels
-- **Quest Completion**: Complete specific quests
-- **Item Collection**: Obtain rare items or quantities
-- **Location Visits**: Visit specific areas or landmarks
-- **Achievement Diaries**: Complete diary tasks
-- **Boss Kills**: Defeat specific bosses
-- **Custom Objectives**: Community-created challenges
+## API Documentation
 
-### Team Features
-- **Progress Sharing**: See which objectives teammates are working on
-- **Communication**: Built-in team chat and strategy planning
-- **Role Assignment**: Assign objectives to specific team members
-- **Coordination Tools**: Mark objectives as claimed or completed
+### Request Headers
+All authenticated requests include:
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
 
-## 📱 User Interface
+### Response Format
+All API responses follow a consistent format:
+```json
+{
+  "status": "ok",
+  "data": { ... },
+  "message": "Optional status message"
+}
+```
 
-### Plugin Panel
-- **RSN Display**: Shows your current logged-in username
-- **Token Input**: Secure field for authentication token
-- **Connection Status**: Visual indicator of sync status
-- **Board Overview**: Quick view of current objectives
+### Error Handling
+- **401 Unauthorized**: Token expired, reauthentication required
+- **429 Rate Limited**: Too many requests, automatic retry with backoff
+- **500 Server Error**: Backend error, automatic retry with exponential backoff
 
-### In-game Overlays
-- **Objective Tracker**: Overlay showing current objectives
-- **Progress Indicators**: Visual progress bars and completion status
-- **Team Notifications**: Alerts when teammates complete objectives
+## System Requirements
 
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**"Must be logged in first"**
-- Ensure you're logged into OSRS before opening the plugin panel
-- The plugin needs to detect your RSN automatically
-
-**"Authentication failed"**
-- Check that your token is copied correctly (no extra spaces)
-- Verify the token hasn't expired on the website
-- Ensure the token hasn't been used with a different RSN
-
-**"Connection failed"**
-- Check your internet connection
-- Verify clan.bingo website is accessible
-- Try generating a new token
-
-### Debug Mode
-Enable debug logging in plugin settings for detailed troubleshooting information.
-
-### Support
-- **Website**: Visit [clan.bingo/support](https://clan.bingo/support)
-- **Discord**: Join our community Discord server
-- **GitHub**: Report issues on the plugin repository
-
-## 🔄 Updates
-
-The plugin automatically checks for updates and will notify you when new versions are available. Updates include:
-- New objective types
-- Enhanced team features
-- Bug fixes and performance improvements
-- Security enhancements
-
-## 📋 System Requirements
-
-- **RuneLite**: Latest version recommended
+### Minimum Requirements
+- **RuneLite**: Latest stable version
 - **Java**: 11 or higher
-- **Internet**: Stable connection for real-time sync
-- **Account**: Active clan.bingo account
+- **Memory**: 512MB additional RAM for plugin operations
+- **Network**: Stable internet connection for API communications
 
-## 🤝 Contributing
+### Recommended
+- **Java**: 17 or higher for optimal performance
+- **Memory**: 1GB+ available RAM
+- **Network**: Low-latency connection for real-time updates
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+## License
 
-## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
+## Support
 
-## 🙏 Acknowledgments
+### Getting Help
+- **Documentation**: Check this README and inline code comments
+- **Issues**: Report bugs on the [GitHub Issues](https://github.com/your-username/BingoPlugin/issues) page
+- **Community**: Join the clan.bingo Discord for community support
 
-- RuneLite team for the excellent plugin framework
-- OSRS community for inspiration and feedback
-- Beta testers who helped refine the plugin
+### Contact
+- **Plugin Issues**: GitHub Issues tracker
+- **clan.bingo Platform**: Visit [clan.bingo](https://clan.bingo) for platform support
+- **Discord**: Join the official clan.bingo Discord server
 
 ---
 
-**Happy Bingo-ing!** 🎯
-
-For the latest updates and community discussions, visit [clan.bingo](https://clan.bingo)
+**Note**: This plugin is designed to work exclusively with the clan.bingo platform. Make sure you have an account on [clan.bingo](https://clan.bingo) before using this plugin.

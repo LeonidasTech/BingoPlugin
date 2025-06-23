@@ -1,390 +1,420 @@
 package wzd.bingo.ui;
 
-import wzd.bingo.BingoService;
-import wzd.bingo.BingoConfig;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
-import net.runelite.api.GameState;
-import net.runelite.client.config.ConfigManager;
-import net.runelite.client.ui.PluginPanel;
+import net.runelite.api.Player;
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.util.ImageUtil;
+import wzd.bingo.BingoConfig;
+import wzd.bingo.BingoService;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.image.BufferedImage;
-import java.util.Optional;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.IOException;
 import java.net.URI;
+import java.util.Optional;
 
+@Slf4j
 public class AuthPanel extends PluginPanel
 {
-    private final BingoService bingoService;
+    private static final Color HOVER_COLOR = ColorScheme.BRAND_ORANGE;
+    private static final Color BUTTON_COLOR = ColorScheme.DARKER_GRAY_COLOR;
+    private static final Color SUCCESS_COLOR = new Color(0, 150, 0);
+    private static final Color ERROR_COLOR = ColorScheme.PROGRESS_ERROR_COLOR;
+
     private final BingoConfig config;
-    private final ConfigManager configManager;
+    private final BingoService bingoService;
     private final Client client;
+    
     private JTextField rsnField;
-    private JTextField tokenField;
-    private JButton linkBtn;
-    private JButton visitProfileBtn;
-    private Timer updateTimer;
-
-    public AuthPanel(BingoService bingoService, BingoConfig config, ConfigManager configManager, Client client)
+    private JTextField discordIdField;
+    private JButton linkAccountButton;
+    private JButton visitProfileButton;
+    private JLabel statusLabel;
+    private JLabel instructionsLabel;
+    private Timer rsnUpdateTimer;
+    
+    public AuthPanel(BingoConfig config, BingoService bingoService, Client client)
     {
-        this.bingoService = bingoService;
         this.config = config;
-        this.configManager = configManager;
+        this.bingoService = bingoService;
         this.client = client;
-
-        setLayout(new BorderLayout());
-        setBackground(ColorScheme.DARK_GRAY_COLOR);
         
-        // Create header panel with image
-        JPanel headerPanel = createHeaderPanel();
-        add(headerPanel, BorderLayout.NORTH);
-
-        // Create main form panel
-        JPanel mainPanel = createMainPanel();
-        add(mainPanel, BorderLayout.CENTER);
-
-        // Start periodic RSN updates
+        initializeComponents();
+        setupLayout();
+        setupEventHandlers();
+        
+        // Start timer to update RSN field
         startRsnUpdateTimer();
         
-        // Initial RSN field update
+        // Initial RSN update
         updateRsnField();
-
-        setupButtonActions();
-    }
-
-    private JPanel createHeaderPanel()
-    {
-        JPanel headerPanel = new JPanel(new BorderLayout());
-        headerPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        headerPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(0, 112, 192)),
-            new EmptyBorder(10, 10, 10, 10)
-        ));
-
-        // Try to load the header image
-        BufferedImage headerImage = ImageUtil.loadImageResource(getClass(), "/wzd/bingo/clan-bingo-header.png");
         
-        if (headerImage != null)
-        {
-            // Scale image to fit better in the header
-            Image scaledImage = headerImage.getScaledInstance(200, -1, Image.SCALE_SMOOTH);
-            JLabel imageLabel = new JLabel(new ImageIcon(scaledImage));
-            imageLabel.setHorizontalAlignment(SwingConstants.CENTER);
-            headerPanel.add(imageLabel, BorderLayout.CENTER);
-        }
-        else
-        {
-            // Fallback text header
-            JLabel header = new JLabel("clan.bingo Authentication", SwingConstants.CENTER);
-            header.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
-            header.setForeground(Color.WHITE);
-            headerPanel.add(header, BorderLayout.CENTER);
-        }
-
-        return headerPanel;
+        log.info("AuthPanel initialized with clan.bingo branding");
     }
-
-    private JPanel createMainPanel()
+    
+    private void initializeComponents()
     {
-        JPanel mainPanel = new JPanel();
-        mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
-        mainPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        mainPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
-
-        // RSN Section
-        mainPanel.add(createFieldSection("RuneScape Name:", createRsnField(), 
-            "(Auto-detected when logged in)"));
-        mainPanel.add(Box.createVerticalStrut(12));
-
-        // Token Section
-        mainPanel.add(createFieldSection("Authentication Token:", createTokenField(), null));
-        mainPanel.add(Box.createVerticalStrut(8));
-
-        // Instructions Section
-        mainPanel.add(createInstructionsPanel());
-        mainPanel.add(Box.createVerticalStrut(15));
-
-        // Buttons Section
-        mainPanel.add(createButtonsPanel());
-
-        return mainPanel;
-    }
-
-    private JPanel createFieldSection(String labelText, JTextField field, String subText)
-    {
-        JPanel section = new JPanel();
-        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
-        section.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        section.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel label = new JLabel(labelText);
-        label.setForeground(Color.WHITE);
-        label.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        label.setAlignmentX(Component.LEFT_ALIGNMENT);
-        section.add(label);
-
-        if (subText != null)
-        {
-            JLabel subLabel = new JLabel(subText);
-            subLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-            subLabel.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 10));
-            subLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-            section.add(subLabel);
-        }
-
-        section.add(Box.createVerticalStrut(4));
-        section.add(field);
-
-        return section;
-    }
-
-    private JTextField createRsnField()
-    {
+        setBackground(ColorScheme.DARK_GRAY_COLOR);
+        
+        // RSN field (read-only, auto-detected)
         rsnField = new JTextField();
         rsnField.setEditable(false);
         rsnField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         rsnField.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         rsnField.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR),
-            new EmptyBorder(6, 8, 6, 8)
+            BorderFactory.createEmptyBorder(10, 12, 10, 12)
         ));
-        rsnField.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-        rsnField.setMaximumSize(new Dimension(Integer.MAX_VALUE, rsnField.getPreferredSize().height));
-        rsnField.setToolTipText("Your RSN will be detected automatically when logged in");
-        return rsnField;
-    }
-
-    private JTextField createTokenField()
-    {
-        tokenField = new JTextField();
-        tokenField.setText(configManager.getConfiguration("bingo", "authToken", ""));
-        tokenField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        tokenField.setForeground(Color.WHITE);
-        tokenField.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR),
-            new EmptyBorder(6, 8, 6, 8)
-        ));
-        tokenField.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-        tokenField.setMaximumSize(new Dimension(Integer.MAX_VALUE, tokenField.getPreferredSize().height));
-        tokenField.setToolTipText("Enter the token from clan.bingo website");
-        return tokenField;
-    }
-
-    private JPanel createInstructionsPanel()
-    {
-        JPanel instructionsPanel = new JPanel();
-        instructionsPanel.setLayout(new BoxLayout(instructionsPanel, BoxLayout.Y_AXIS));
-        instructionsPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        instructionsPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR),
-            new EmptyBorder(8, 10, 8, 10)
-        ));
-        instructionsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        // Title
-        JLabel titleLabel = new JLabel("How to get your token:");
-        titleLabel.setForeground(new Color(255, 144, 64));
-        titleLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
-        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        instructionsPanel.add(titleLabel);
-
-        instructionsPanel.add(Box.createVerticalStrut(4));
-
-        // Instructions - more compact
-        String[] steps = {
-            "1. Log into clan.bingo",
-            "2. Account → View Profile",
-            "3. Authentication Token section",
-            "4. Click \"Generate Token\" if needed"
-        };
-
-        for (String step : steps)
-        {
-            JLabel stepLabel = new JLabel(step);
-            stepLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-            stepLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
-            stepLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-            instructionsPanel.add(stepLabel);
-        }
-
-        return instructionsPanel;
-    }
-
-    private JPanel createButtonsPanel()
-    {
-        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
-        buttonsPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        buttonsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        // Link Account button - RuneLite style
-        linkBtn = new JButton("Link Account");
-        linkBtn.setBackground(new Color(0, 112, 192));
-        linkBtn.setForeground(Color.WHITE);
-        linkBtn.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
-        linkBtn.setBorder(new EmptyBorder(6, 12, 6, 12));
-        linkBtn.setFocusPainted(false);
-        linkBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        rsnField.setFont(rsnField.getFont().deriveFont(13f));
         
-        // Visit Profile button - secondary style
-        visitProfileBtn = new JButton("Visit Profile");
-        visitProfileBtn.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        visitProfileBtn.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        visitProfileBtn.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
-        visitProfileBtn.setBorder(BorderFactory.createCompoundBorder(
+        // Discord ID field
+        discordIdField = new JTextField();
+        discordIdField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        discordIdField.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        discordIdField.setCaretColor(ColorScheme.LIGHT_GRAY_COLOR);
+        discordIdField.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR),
-            new EmptyBorder(5, 12, 5, 12)
+            BorderFactory.createEmptyBorder(10, 12, 10, 12)
         ));
-        visitProfileBtn.setFocusPainted(false);
-        visitProfileBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        // Hover effects
-        linkBtn.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                linkBtn.setBackground(new Color(0, 112, 192).brighter());
-            }
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                linkBtn.setBackground(new Color(0, 112, 192));
-            }
-        });
-
-        visitProfileBtn.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                visitProfileBtn.setBackground(ColorScheme.MEDIUM_GRAY_COLOR);
-            }
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                visitProfileBtn.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-            }
-        });
-
-        buttonsPanel.add(linkBtn);
-        buttonsPanel.add(visitProfileBtn);
-
-        return buttonsPanel;
+        discordIdField.setFont(discordIdField.getFont().deriveFont(13f));
+        
+        // Pre-fill Discord ID if available
+        if (config.discordId() != null && !config.discordId().isEmpty())
+        {
+            discordIdField.setText(config.discordId());
+        }
+        
+        // Link Account button
+        linkAccountButton = createStyledButton("Link Account");
+        
+        // Visit Profile button
+        visitProfileButton = createStyledButton("Visit Profile");
+        
+        // Status label
+        statusLabel = new JLabel("Ready to authenticate");
+        statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        statusLabel.setFont(statusLabel.getFont().deriveFont(12f));
+        statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        
+        // Instructions label with better spacing
+        instructionsLabel = new JLabel("<html><div style='text-align: left; font-size: 12px; color: #FFA500; line-height: 1.6;'>" +
+            "<b>How to get your Discord ID:</b><br/><br/>" +
+            "1. Log into clan.bingo<br/>" +
+            "2. Account → View Profile<br/>" +
+            "3. Your Discord ID is displayed there<br/>" +
+            "4. Copy and paste it above" +
+            "</div></html>");
+        instructionsLabel.setForeground(new Color(255, 165, 0)); // Orange color
+        instructionsLabel.setHorizontalAlignment(SwingConstants.LEFT);
     }
-
-    private void setupButtonActions()
+    
+    private JButton createStyledButton(String text)
     {
-        linkBtn.addActionListener(e -> {
-            String token = tokenField.getText().trim();
-            if (token.isEmpty())
+        JButton button = new JButton(text);
+        button.setBackground(BUTTON_COLOR);
+        button.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setPreferredSize(new Dimension(100, 32));
+        button.setFont(button.getFont().deriveFont(Font.BOLD, 12f));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        
+        // Hover effect
+        button.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseEntered(MouseEvent e)
             {
-                showErrorDialog("Please enter your authentication token from clan.bingo website.");
-                return;
+                button.setBackground(HOVER_COLOR);
             }
-
-            String rsn = getCurrentRsn();
-            if (rsn == null || rsn.isEmpty())
+            
+            @Override
+            public void mouseExited(MouseEvent e)
             {
-                showErrorDialog("You must be logged into RuneScape first.");
-                return;
+                button.setBackground(BUTTON_COLOR);
             }
-
-            // Show loading state
-            linkBtn.setText("Linking...");
-            linkBtn.setEnabled(false);
-
-            // Attempt to authenticate with the token
+        });
+        
+        return button;
+    }
+    
+    private void setupLayout()
+    {
+        setLayout(new BorderLayout());
+        setBorder(new EmptyBorder(15, 15, 15, 15));
+        
+        // Header panel with logo
+        JPanel headerPanel = createHeaderPanel();
+        
+        // Main content panel
+        JPanel mainPanel = new JPanel();
+        mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
+        mainPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        
+        // RSN section
+        JLabel rsnTitleLabel = new JLabel("RuneScape Name:");
+        rsnTitleLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        rsnTitleLabel.setFont(rsnTitleLabel.getFont().deriveFont(Font.BOLD, 13f));
+        rsnTitleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        JLabel rsnSubLabel = new JLabel("(Auto-detected when logged in)");
+        rsnSubLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR.darker());
+        rsnSubLabel.setFont(rsnSubLabel.getFont().deriveFont(11f));
+        rsnSubLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        rsnField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        rsnField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        
+        // Discord ID section
+        JLabel discordIdTitleLabel = new JLabel("Discord ID:");
+        discordIdTitleLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        discordIdTitleLabel.setFont(discordIdTitleLabel.getFont().deriveFont(Font.BOLD, 13f));
+        discordIdTitleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        discordIdField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        discordIdField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        
+        // Instructions panel
+        instructionsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        buttonPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        buttonPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        buttonPanel.add(linkAccountButton);
+        buttonPanel.add(visitProfileButton);
+        
+        // Status label
+        statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        
+        // Add all components with proper spacing
+        mainPanel.add(Box.createVerticalStrut(12));
+        mainPanel.add(rsnTitleLabel);
+        mainPanel.add(Box.createVerticalStrut(6));
+        mainPanel.add(rsnSubLabel);
+        mainPanel.add(Box.createVerticalStrut(10));
+        mainPanel.add(rsnField);
+        mainPanel.add(Box.createVerticalStrut(20));
+        mainPanel.add(discordIdTitleLabel);
+        mainPanel.add(Box.createVerticalStrut(10));
+        mainPanel.add(discordIdField);
+        mainPanel.add(Box.createVerticalStrut(18));
+        mainPanel.add(instructionsLabel);
+        mainPanel.add(Box.createVerticalStrut(20));
+        mainPanel.add(buttonPanel);
+        mainPanel.add(Box.createVerticalStrut(15));
+        mainPanel.add(statusLabel);
+        mainPanel.add(Box.createVerticalGlue());
+        
+        add(headerPanel, BorderLayout.NORTH);
+        add(mainPanel, BorderLayout.CENTER);
+    }
+    
+    private JPanel createHeaderPanel()
+    {
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        headerPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(0, 112, 192)),
+            BorderFactory.createEmptyBorder(12, 10, 12, 10)
+        ));
+        
+        try
+        {
+            // Load clan.bingo header image
+            ImageIcon headerIcon = new ImageIcon(ImageUtil.loadImageResource(getClass(), "/wzd/bingo/clan-bingo-header.png"));
+            JLabel headerLabel = new JLabel(headerIcon);
+            headerLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            headerLabel.setForeground(new Color(0, 112, 192));
+            headerPanel.add(headerLabel, BorderLayout.CENTER);
+        }
+        catch (Exception e)
+        {
+            // Fallback text header
+            JLabel headerLabel = new JLabel("clan.bingo authentication");
+            headerLabel.setForeground(new Color(0, 112, 192));
+            headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 14f));
+            headerLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            headerPanel.add(headerLabel, BorderLayout.CENTER);
+            log.warn("Could not load header image, using text fallback", e);
+        }
+        
+        return headerPanel;
+    }
+    
+    private void setupEventHandlers()
+    {
+        linkAccountButton.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                handleLinkAccount();
+            }
+        });
+        
+        visitProfileButton.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                handleVisitProfile();
+            }
+        });
+    }
+    
+    private void handleLinkAccount()
+    {
+        String rsn = rsnField.getText().trim();
+        String discordId = discordIdField.getText().trim();
+        
+        if (rsn.isEmpty() || rsn.equals("(Must be logged in first)"))
+        {
+            updateStatus("Please log into OSRS first", ERROR_COLOR);
+            return;
+        }
+        
+        if (discordId.isEmpty())
+        {
+            updateStatus("Please enter your Discord ID", ERROR_COLOR);
+            return;
+        }
+        
+        // Validate Discord ID format (should be numeric and 17-19 digits)
+        if (!discordId.matches("\\d{17,19}"))
+        {
+            updateStatus("Invalid Discord ID format", ERROR_COLOR);
+            return;
+        }
+        
+        linkAccountButton.setText("Linking...");
+        linkAccountButton.setEnabled(false);
+        updateStatus("Authenticating with clan.bingo...", ColorScheme.LIGHT_GRAY_COLOR);
+        
+        // Perform authentication in background thread (not on EDT)
+        new Thread(() -> {
+            Optional<String> result = bingoService.authenticateWithDiscord(rsn, discordId);
+            
+            // Update UI back on EDT
             SwingUtilities.invokeLater(() -> {
-                try {
-                    Optional<String> result = bingoService.authenticateWithToken(rsn, token);
-                    if (result.isPresent())
-                    {
-                        // Save the validated token and RSN
-                configManager.setConfiguration("bingo", "rsn", rsn);
-                configManager.setConfiguration("bingo", "authToken", token);
-                        showSuccessDialog("Account linked successfully!");
-                        bingoService.initialize(); // Initialize with validated credentials
-            }
-            else
-            {
-                        showErrorDialog("Authentication failed. Please check your token or try again.");
-                    }
-                } finally {
-                    linkBtn.setText("Link Account");
-                    linkBtn.setEnabled(true);
+                linkAccountButton.setText("Link Account");
+                linkAccountButton.setEnabled(true);
+                
+                if (result.isPresent())
+                {
+                    updateStatus("Authentication successful!", SUCCESS_COLOR);
+                    updateUIAfterAuthentication();
+                    
+                    // Initialize the bingo service
+                    bingoService.initialize();
+                }
+                else
+                {
+                    updateStatus("Authentication failed. Check your Discord ID.", ERROR_COLOR);
                 }
             });
-        });
-
-        visitProfileBtn.addActionListener(e -> {
-            try {
-                Desktop.getDesktop().browse(new URI(config.profileUrl()));
-            } catch (Exception ex) {
-                showErrorDialog("Could not open browser. Please visit " + config.profileUrl() + " manually.");
-            }
-        });
+        }).start();
     }
-
+    
+    private void handleVisitProfile()
+    {
+        try
+        {
+            Desktop.getDesktop().browse(URI.create(config.profileUrl()));
+            log.info("Opened profile URL: {}", config.profileUrl());
+        }
+        catch (IOException e)
+        {
+            log.error("Failed to open profile URL", e);
+            updateStatus("Failed to open profile page", ERROR_COLOR);
+        }
+    }
+    
+    private void updateStatus(String message, Color color)
+    {
+        statusLabel.setText(message);
+        statusLabel.setForeground(color);
+        log.info("Status updated: {}", message);
+    }
+    
+    private void updateUIAfterAuthentication()
+    {
+        // Update panel background to indicate success
+        setBackground(ColorScheme.DARK_GRAY_COLOR);
+        
+        // Update instructions
+        instructionsLabel.setText("<html><div style='text-align: center; font-size: 11px;'>" +
+            "✓ Account linked successfully<br/>" +
+            "Visit profile to manage settings" +
+            "</div></html>");
+        instructionsLabel.setForeground(SUCCESS_COLOR.brighter());
+    }
+    
     private void startRsnUpdateTimer()
     {
-        // Update RSN field every 2 seconds to catch login state changes
-        updateTimer = new Timer(true);
-        updateTimer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                SwingUtilities.invokeLater(() -> updateRsnField());
+        rsnUpdateTimer = new Timer(2000, e -> updateRsnField()); // Update every 2 seconds
+        rsnUpdateTimer.start();
+    }
+    
+    public void updateRsnField()
+    {
+        Player localPlayer = client.getLocalPlayer();
+        if (localPlayer != null && localPlayer.getName() != null)
+        {
+            String currentRsn = localPlayer.getName();
+            if (!currentRsn.equals(rsnField.getText()))
+            {
+                rsnField.setText(currentRsn);
+                rsnField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+                
+                // Add subtle green tint to indicate logged in
+                Color loggedInColor = new Color(
+                    ColorScheme.DARKER_GRAY_COLOR.getRed(),
+                    Math.min(255, ColorScheme.DARKER_GRAY_COLOR.getGreen() + 20),
+                    ColorScheme.DARKER_GRAY_COLOR.getBlue()
+                );
+                rsnField.setBackground(loggedInColor);
+                
+                log.debug("RSN field updated: {}", currentRsn);
             }
-        }, 0, 2000); // Update every 2 seconds
-    }
-
-    private String getCurrentRsn()
-    {
-        if (client.getGameState() == GameState.LOGGED_IN && client.getLocalPlayer() != null)
-        {
-            return client.getLocalPlayer().getName();
-        }
-        return null;
-    }
-
-    private void updateRsnField()
-    {
-        String rsn = getCurrentRsn();
-        if (rsn != null && !rsn.isEmpty())
-        {
-            rsnField.setText(rsn);
-            rsnField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-            rsnField.setForeground(Color.WHITE);
         }
         else
         {
-            rsnField.setText("(Must be logged in first)");
-            rsnField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-            rsnField.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+            if (!rsnField.getText().equals("(Must be logged in first)"))
+            {
+                rsnField.setText("(Must be logged in first)");
+                
+                // Add subtle red tint to indicate not logged in
+                Color notLoggedInColor = new Color(
+                    Math.min(255, ColorScheme.DARKER_GRAY_COLOR.getRed() + 20),
+                    ColorScheme.DARKER_GRAY_COLOR.getGreen(),
+                    ColorScheme.DARKER_GRAY_COLOR.getBlue()
+                );
+                rsnField.setBackground(notLoggedInColor);
+            }
         }
     }
-
-    private void showErrorDialog(String message)
-    {
-        JOptionPane.showMessageDialog(this, message, "Authentication Error", JOptionPane.ERROR_MESSAGE);
-    }
-
-    private void showSuccessDialog(String message)
-    {
-        JOptionPane.showMessageDialog(this, message, "Success", JOptionPane.INFORMATION_MESSAGE);
-    }
-
-    // Call this method when the game state changes
+    
     public void onGameStateChanged()
     {
+        // Immediately update RSN field when game state changes
         updateRsnField();
     }
-
-    // Clean up timer when panel is destroyed
-    @Override
-    public void removeNotify()
+    
+    public void shutdown()
     {
-        super.removeNotify();
-        if (updateTimer != null)
+        if (rsnUpdateTimer != null)
         {
-            updateTimer.cancel();
+            rsnUpdateTimer.stop();
         }
+        log.info("AuthPanel shutdown complete");
     }
 } 

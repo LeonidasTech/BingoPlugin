@@ -17,9 +17,38 @@ public interface BingoConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "discordId",
+        name = "Discord ID",
+        description = "Your Discord user ID for authentication"
+    )
+    default String discordId() {
+        return "";
+    }
+
+    @ConfigItem(
+        keyName = "jwtToken",
+        name = "JWT Token",
+        description = "Authentication JWT token (automatically managed)",
+        secret = true
+    )
+    default String jwtToken() {
+        return "";
+    }
+
+    @ConfigItem(
+        keyName = "teamId",
+        name = "Team ID",
+        description = "Your team ID (automatically set after login)",
+        secret = true
+    )
+    default String teamId() {
+        return "";
+    }
+
+    @ConfigItem(
         keyName = "authToken",
         name = "Auth Token",
-        description = "JWT token for Bingo API",
+        description = "Legacy JWT token for Bingo API (deprecated)",
         secret = true
     )
     default String authToken() {

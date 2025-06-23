@@ -1,4 +1,4 @@
-package com.example.bingo;
+package wzd.bingo;
 
 import lombok.extern.slf4j.Slf4j;
 import javax.inject.Inject;
@@ -13,24 +13,44 @@ public class BingoService
     private BingoConfig config;
 
     /**
-     * Simulates login process and returns JWT token
-     * @param rsn The RuneScape username
-     * @return Optional containing the JWT token if login successful
+     * Authenticate user with a token generated from the website
+     * @param rsn The RuneScape username (auto-detected from client)
+     * @param token The authentication token from the website
+     * @return Optional containing success message if authentication successful
      */
-    public Optional<String> login(String rsn)
+    public Optional<String> authenticateWithToken(String rsn, String token)
     {
-        log.info("Attempting login for RSN: {}", rsn);
+        log.info("Attempting token authentication for RSN: {}", rsn);
         
         // TODO: Implement actual API call to your bingo service
-        // For now, return a mock token
-        if (rsn != null && !rsn.trim().isEmpty())
+        // The API should verify:
+        // 1. Token exists in database
+        // 2. Token is not expired
+        // 3. Token is not already used (if single-use)
+        // 4. Link the token to the RSN
+        
+        if (rsn != null && !rsn.trim().isEmpty() && token != null && !token.trim().isEmpty())
         {
-            String mockToken = "mock_jwt_token_" + rsn;
-            log.info("Login successful for RSN: {}", rsn);
-            return Optional.of(mockToken);
+            // Mock authentication - replace with actual API call
+            if (token.length() >= 8) // Basic validation
+            {
+                log.info("Token authentication successful for RSN: {}", rsn);
+                return Optional.of("Authentication successful");
+            }
         }
         
-        log.warn("Login failed for RSN: {}", rsn);
+        log.warn("Token authentication failed for RSN: {}", rsn);
+        return Optional.empty();
+    }
+
+    /**
+     * Legacy login method - deprecated, use authenticateWithToken instead
+     * @deprecated Use authenticateWithToken(String, String) instead
+     */
+    @Deprecated
+    public Optional<String> login(String rsn)
+    {
+        log.warn("Deprecated login method called - use authenticateWithToken instead");
         return Optional.empty();
     }
 
@@ -46,7 +66,7 @@ public class BingoService
         if (token != null && !token.isEmpty() && rsn != null && !rsn.isEmpty())
         {
             log.info("Initializing Bingo service for user: {}", rsn);
-            // TODO: Implement board and team data fetching
+            // TODO: Implement board and team data fetching using the authenticated token
             fetchBoardData();
             fetchTeamData();
         }
@@ -58,14 +78,16 @@ public class BingoService
 
     private void fetchBoardData()
     {
-        // TODO: Implement API call to fetch bingo board
-        log.info("Fetching bingo board data...");
+        // TODO: Implement API call to fetch bingo board using authenticated token
+        String token = config.authToken();
+        log.info("Fetching bingo board data with token: {}...", token != null ? token.substring(0, Math.min(8, token.length())) : "null");
     }
 
     private void fetchTeamData()
     {
-        // TODO: Implement API call to fetch team information
-        log.info("Fetching team data...");
+        // TODO: Implement API call to fetch team information using authenticated token
+        String token = config.authToken();
+        log.info("Fetching team data with token: {}...", token != null ? token.substring(0, Math.min(8, token.length())) : "null");
     }
 
     /**

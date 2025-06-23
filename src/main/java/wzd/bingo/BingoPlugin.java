@@ -1,6 +1,6 @@
-package com.example.bingo;
+package wzd.bingo;
 
-import com.example.bingo.ui.AuthPanel;
+import wzd.bingo.ui.AuthPanel;
 import com.google.inject.Provides;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +16,7 @@ import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 
 import java.awt.image.BufferedImage;
+import java.awt.*;
 
 @Slf4j
 @PluginDescriptor(
@@ -47,15 +48,29 @@ public class BingoPlugin extends Plugin
     {
         log.info("Bingo plugin started!");
         
-        // Create the auth panel
-        authPanel = new AuthPanel(bingoService, configManager);
-
+        // Create the auth panel with client for RSN detection
+        authPanel = new AuthPanel(bingoService, configManager, client);
+        
+        // Try to load the icon from resources/wzd/bingo/
+        BufferedImage icon = ImageUtil.loadImageResource(getClass(), "/wzd/bingo/panel-icon.png");
+        
+        // If icon loading failed, create a simple fallback icon
+        if (icon == null)
+        {
+            log.warn("Could not load /wzd/bingo/panel-icon.png, using fallback icon");
+            icon = new BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = icon.createGraphics();
+            g.setColor(Color.BLUE);
+            g.fillRect(0, 0, 16, 16);
+            g.setColor(Color.WHITE);
+            g.drawString("B", 6, 12);
+            g.dispose();
+        }
+        
         // Create navigation button for the side panel
-        final BufferedImage icon = ImageUtil.loadImageResource(getClass(), "panel-icon.png");
-
         navButton = NavigationButton.builder()
             .tooltip("Bingo")
-            .icon(icon != null ? icon : new BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB))
+            .icon(icon)
             .priority(5)
             .panel(authPanel)
             .build();
@@ -86,7 +101,12 @@ public class BingoPlugin extends Plugin
     {
         if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
         {
-            // Player logged in - could sync some game state if needed
+            // Player logged in - update RSN field in auth panel
+            if (authPanel != null)
+            {
+                authPanel.onGameStateChanged();
+            }
+            
             if (bingoService.isAuthenticated())
             {
                 log.info("Player logged in, Bingo service is authenticated");
@@ -95,7 +115,11 @@ public class BingoPlugin extends Plugin
         }
         else if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN)
         {
-            // Player logged out
+            // Player logged out - update RSN field in auth panel
+            if (authPanel != null)
+            {
+                authPanel.onGameStateChanged();
+            }
             log.info("Player logged out");
         }
     }

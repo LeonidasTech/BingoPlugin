@@ -1,4 +1,4 @@
-package com.example.bingo;
+package wzd.bingo;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;

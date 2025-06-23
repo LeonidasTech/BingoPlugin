@@ -25,4 +25,22 @@ public interface BingoConfig extends Config
     default String authToken() {
         return "";
     }
+
+    @ConfigItem(
+        keyName = "profileUrl",
+        name = "Profile URL",
+        description = "URL for the clan.bingo profile page where users can manage authentication tokens"
+    )
+    default String profileUrl() {
+        return "https://clan.bingo/account/profile";
+    }
+
+    @ConfigItem(
+        keyName = "authApiUrl",
+        name = "Authentication API URL",
+        description = "Base URL for the clan.bingo authentication API"
+    )
+    default String authApiUrl() {
+        return "https://api.clan.bingo";
+    }
 } 

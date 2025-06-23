@@ -49,7 +49,7 @@ public class BingoPlugin extends Plugin
         log.info("Bingo plugin started!");
         
         // Create the auth panel with client for RSN detection
-        authPanel = new AuthPanel(bingoService, configManager, client);
+        authPanel = new AuthPanel(bingoService, config, configManager, client);
         
         // Try to load the icon from resources/wzd/bingo/
         BufferedImage icon = ImageUtil.loadImageResource(getClass(), "/wzd/bingo/panel-icon.png");

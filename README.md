@@ -1,6 +1,6 @@
 # Bingo Plugin for RuneLite
 
-A RuneLite plugin that integrates with the **wzd.bingo** website to provide real-time OSRS Bingo gameplay with team collaboration features.
+A RuneLite plugin that integrates with the **clan.bingo** website to provide real-time OSRS Bingo gameplay with team collaboration features.
 
 ## 🎯 What is Bingo?
 
@@ -9,11 +9,11 @@ OSRS Bingo is a competitive game mode where players race to complete objectives 
 ## ✨ Features
 
 - **Automatic RSN Detection**: No need to manually enter your username - the plugin detects it when you're logged into OSRS
-- **Secure Token Authentication**: Link your RuneLite client to your wzd.bingo account using website-generated tokens
+- **Secure Token Authentication**: Link your RuneLite client to your clan.bingo account using website-generated tokens
 - **Real-time Board Sync**: Your bingo board and progress sync automatically between the plugin and website
 - **Team Collaboration**: View team member progress and coordinate strategies
 - **Progress Tracking**: Automatic detection of completed objectives based on your in-game actions
-- **Cross-platform**: Works seamlessly with the wzd.bingo web interface
+- **Cross-platform**: Works seamlessly with the clan.bingo web interface
 
 ## 🚀 Quick Start
 
@@ -26,9 +26,9 @@ OSRS Bingo is a competitive game mode where players race to complete objectives 
 
 ### 2. Authentication Setup
 
-1. **Create Account**: Visit [wzd.bingo](https://wzd.bingo) and create an account
+1. **Create Account**: Visit [clan.bingo](https://clan.bingo) and create an account
 2. **Generate Token**: 
-   - Log into your wzd.bingo account
+   - Log into your clan.bingo account
    - Navigate to "Plugin Integration" or "Generate Token"
    - Click "Generate New Token"
    - Copy the generated token (64-character string)
@@ -51,10 +51,10 @@ Once authenticated, the plugin will:
 ### Authentication Flow
 
 ```
-1. User creates account on wzd.bingo website
+1. User creates account on clan.bingo website
 2. User generates authentication token on website
 3. User enters token in RuneLite plugin
-4. Plugin validates token with wzd.bingo API
+4. Plugin validates token with clan.bingo API
 5. Token is linked to user's RSN (auto-detected)
 6. Plugin downloads board and team data
 7. Real-time sync begins
@@ -62,14 +62,14 @@ Once authenticated, the plugin will:
 
 ### Data Synchronization
 
-The plugin maintains a persistent connection with the wzd.bingo servers to:
+The plugin maintains a persistent connection with the clan.bingo servers to:
 - **Download**: Bingo boards, team rosters, current objectives
 - **Upload**: Completed objectives, progress updates, location data
 - **Real-time**: Team member progress, chat messages, strategy updates
 
 ## 🌐 Website Integration
 
-### wzd.bingo Website Features
+### clan.bingo Website Features
 
 - **Board Creation**: Create custom bingo boards with various objective types
 - **Team Management**: Form teams, invite players, manage permissions
@@ -79,7 +79,7 @@ The plugin maintains a persistent connection with the wzd.bingo servers to:
 
 ### API Endpoints Used
 
-The plugin communicates with these wzd.bingo API endpoints:
+The plugin communicates with these clan.bingo API endpoints:
 - `POST /api/authenticate-token` - Token validation and account linking
 - `GET /api/board/{id}` - Download bingo board data
 - `GET /api/team/{id}` - Fetch team information
@@ -98,7 +98,7 @@ The plugin communicates with these wzd.bingo API endpoints:
 - **Minimal Data**: Only necessary game data is transmitted
 - **Encryption**: All communication uses HTTPS/WSS
 - **Local Storage**: Sensitive data is stored securely in RuneLite config
-- **No Passwords**: Plugin never handles your wzd.bingo password
+- **No Passwords**: Plugin never handles your clan.bingo password
 
 ## 🛠️ Configuration
 
@@ -162,14 +162,14 @@ Access plugin settings through RuneLite's configuration panel:
 
 **"Connection failed"**
 - Check your internet connection
-- Verify wzd.bingo website is accessible
+- Verify clan.bingo website is accessible
 - Try generating a new token
 
 ### Debug Mode
 Enable debug logging in plugin settings for detailed troubleshooting information.
 
 ### Support
-- **Website**: Visit [wzd.bingo/support](https://wzd.bingo/support)
+- **Website**: Visit [clan.bingo/support](https://clan.bingo/support)
 - **Discord**: Join our community Discord server
 - **GitHub**: Report issues on the plugin repository
 
@@ -186,7 +186,7 @@ The plugin automatically checks for updates and will notify you when new version
 - **RuneLite**: Latest version recommended
 - **Java**: 11 or higher
 - **Internet**: Stable connection for real-time sync
-- **Account**: Active wzd.bingo account
+- **Account**: Active clan.bingo account
 
 ## 🤝 Contributing
 
@@ -206,4 +206,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 **Happy Bingo-ing!** 🎯
 
-For the latest updates and community discussions, visit [wzd.bingo](https://wzd.bingo)
+For the latest updates and community discussions, visit [clan.bingo](https://clan.bingo)

@@ -56,12 +56,12 @@ public interface BingoConfig extends Config
     }
 
     @ConfigItem(
-        keyName = "profileUrl",
-        name = "Profile URL",
-        description = "URL for the clan.bingo profile page where users can manage authentication tokens"
+        keyName = "siteUrl",
+        name = "Site URL",
+        description = "Base URL for the clan.bingo website"
     )
-    default String profileUrl() {
-        return "https://clan.bingo/account/profile";
+    default String siteUrl() {
+        return "https://clan.bingo";
     }
 
     @ConfigItem(
@@ -71,5 +71,15 @@ public interface BingoConfig extends Config
     )
     default String authApiUrl() {
         return "https://api.clan.bingo";
+    }
+
+    @ConfigItem(
+        keyName = "isAuthenticated",
+        name = "Is Authenticated",
+        description = "Whether the user is currently authenticated (automatically managed)",
+        hidden = true
+    )
+    default boolean isAuthenticated() {
+        return false;
     }
 } 

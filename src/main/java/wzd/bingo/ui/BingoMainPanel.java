@@ -49,6 +49,11 @@ public class BingoMainPanel extends PluginPanel
     private JLabel statusLabel;
     private Timer eventRefreshTimer;
     
+    // Top action buttons
+    private JButton viewProfileButton;
+    private JButton settingsButton;
+    private JButton logoutButton;
+    
     public BingoMainPanel(BingoConfig config, BingoService bingoService, ConfigManager configManager, Runnable onLogout)
     {
         this.config = config;
@@ -72,6 +77,11 @@ public class BingoMainPanel extends PluginPanel
     private void initializeComponents()
     {
         setBackground(ColorScheme.DARK_GRAY_COLOR);
+        
+        // Top action buttons
+        viewProfileButton = createCompactButton("View Profile");
+        settingsButton = createCompactButton("Settings");
+        logoutButton = createCompactButton("Logout");
         
         // User info label
         userInfoLabel = new JLabel("Welcome, " + config.rsn());
@@ -111,6 +121,39 @@ public class BingoMainPanel extends PluginPanel
         return label;
     }
     
+    private JButton createCompactButton(String text)
+    {
+        JButton button = new JButton(text);
+        button.setBackground(BUTTON_COLOR);
+        button.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setPreferredSize(new Dimension(80, 28));
+        button.setFont(button.getFont().deriveFont(Font.BOLD, 11f));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        
+        // Hover effect
+        button.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseEntered(MouseEvent e)
+            {
+                if (button.isEnabled())
+                {
+                    button.setBackground(HOVER_COLOR);
+                }
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e)
+            {
+                button.setBackground(BUTTON_COLOR);
+            }
+        });
+        
+        return button;
+    }
+    
     private JButton createStyledButton(String text)
     {
         JButton button = new JButton(text);
@@ -118,7 +161,7 @@ public class BingoMainPanel extends PluginPanel
         button.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         button.setFocusPainted(false);
         button.setBorderPainted(false);
-        button.setPreferredSize(new Dimension(100, 32));
+        button.setPreferredSize(new Dimension(120, 32));
         button.setFont(button.getFont().deriveFont(Font.BOLD, 12f));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         
@@ -147,22 +190,22 @@ public class BingoMainPanel extends PluginPanel
     private void setupLayout()
     {
         setLayout(new BorderLayout());
-        setBorder(new EmptyBorder(15, 15, 15, 15));
+        setBorder(new EmptyBorder(10, 10, 10, 10));
         
         // Header panel with logo
         JPanel headerPanel = createHeaderPanel();
+        
+        // Top buttons panel
+        JPanel topButtonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 5));
+        topButtonsPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        topButtonsPanel.add(viewProfileButton);
+        topButtonsPanel.add(settingsButton);
+        topButtonsPanel.add(logoutButton);
         
         // Main content panel
         JPanel mainPanel = new JPanel();
         mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
         mainPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        
-        // Top buttons panel
-        JPanel topButtonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
-        topButtonsPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        topButtonsPanel.add(createStyledButton("View Profile"));
-        topButtonsPanel.add(createStyledButton("Settings"));
-        topButtonsPanel.add(createStyledButton("Logout"));
         
         // User info section
         userInfoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -182,18 +225,18 @@ public class BingoMainPanel extends PluginPanel
         eventInfoPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
         eventInfoPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR),
-            BorderFactory.createEmptyBorder(10, 12, 10, 12)
+            BorderFactory.createEmptyBorder(12, 15, 12, 15)
         ));
         eventInfoPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
         eventInfoPanel.add(eventNameLabel);
-        eventInfoPanel.add(Box.createVerticalStrut(5));
+        eventInfoPanel.add(Box.createVerticalStrut(8));
         eventInfoPanel.add(totalParticipantsLabel);
-        eventInfoPanel.add(Box.createVerticalStrut(5));
+        eventInfoPanel.add(Box.createVerticalStrut(8));
         eventInfoPanel.add(prizePoolLabel);
-        eventInfoPanel.add(Box.createVerticalStrut(5));
+        eventInfoPanel.add(Box.createVerticalStrut(8));
         eventInfoPanel.add(timeRemainingLabel);
-        eventInfoPanel.add(Box.createVerticalStrut(5));
+        eventInfoPanel.add(Box.createVerticalStrut(8));
         eventInfoPanel.add(totalTilesLabel);
         
         // View Board button panel
@@ -205,7 +248,6 @@ public class BingoMainPanel extends PluginPanel
         statusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         
         // Add all components with proper spacing
-        mainPanel.add(Box.createVerticalStrut(10));
         mainPanel.add(topButtonsPanel);
         mainPanel.add(Box.createVerticalStrut(15));
         mainPanel.add(userInfoLabel);
@@ -217,7 +259,7 @@ public class BingoMainPanel extends PluginPanel
         mainPanel.add(eventInfoPanel);
         mainPanel.add(Box.createVerticalStrut(15));
         mainPanel.add(viewBoardPanel);
-        mainPanel.add(Box.createVerticalStrut(10));
+        mainPanel.add(Box.createVerticalStrut(15));
         mainPanel.add(statusLabel);
         mainPanel.add(Box.createVerticalGlue());
         
@@ -231,7 +273,7 @@ public class BingoMainPanel extends PluginPanel
         headerPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
         headerPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(0, 112, 192)),
-            BorderFactory.createEmptyBorder(12, 10, 12, 10)
+            BorderFactory.createEmptyBorder(10, 8, 10, 8)
         ));
         
         try
@@ -258,6 +300,11 @@ public class BingoMainPanel extends PluginPanel
     
     private void setupEventHandlers()
     {
+        // Top action buttons
+        viewProfileButton.addActionListener(e -> openProfilePage());
+        settingsButton.addActionListener(e -> openSettings());
+        logoutButton.addActionListener(e -> handleLogout());
+        
         // Event dropdown selection
         eventDropdown.addActionListener(e -> {
             EventItem selectedEvent = (EventItem) eventDropdown.getSelectedItem();
@@ -291,23 +338,15 @@ public class BingoMainPanel extends PluginPanel
                 }
             }
         });
-        
-        // Top buttons - get references after creation
-        Component[] components = ((JPanel) ((JPanel) getComponent(1)).getComponent(1)).getComponents();
-        if (components.length >= 3)
-        {
-            ((JButton) components[0]).addActionListener(e -> openProfilePage());
-            ((JButton) components[1]).addActionListener(e -> openSettings());
-            ((JButton) components[2]).addActionListener(e -> handleLogout());
-        }
     }
     
     private void openProfilePage()
     {
         try
         {
-            Desktop.getDesktop().browse(URI.create(config.profileUrl()));
-            log.info("Opened profile URL: {}", config.profileUrl());
+            String profileUrl = config.siteUrl() + "/profile";
+            Desktop.getDesktop().browse(URI.create(profileUrl));
+            log.info("Opened profile URL: {}", profileUrl);
         }
         catch (IOException e)
         {
@@ -367,37 +406,46 @@ public class BingoMainPanel extends PluginPanel
     {
         eventDropdown.removeAllItems();
         
-        boolean hasActiveEvent = eventsData.get("hasActiveEvent").getAsBoolean();
-        
-        if (hasActiveEvent)
+        try
         {
-            JsonArray activeEvents = eventsData.getAsJsonArray("activeEvents");
+            boolean hasActiveEvent = eventsData.has("hasActiveEvent") && eventsData.get("hasActiveEvent").getAsBoolean();
             
-            for (JsonElement eventElement : activeEvents)
+            if (hasActiveEvent && eventsData.has("activeEvents"))
             {
-                JsonObject event = eventElement.getAsJsonObject();
+                JsonArray activeEvents = eventsData.getAsJsonArray("activeEvents");
                 
-                String bingoId = event.get("bingoId").getAsString();
-                String name = event.get("name").getAsString();
-                String groupId = event.has("groupId") ? event.get("groupId").getAsString() : "";
-                int durationDays = event.get("durationDays").getAsInt();
-                int daysRemaining = event.get("daysRemaining").getAsInt();
-                int totalTiles = event.has("totalTiles") ? event.get("totalTiles").getAsInt() : 25; // Default bingo size
-                boolean isActive = event.get("isActive").getAsBoolean();
+                for (JsonElement eventElement : activeEvents)
+                {
+                    JsonObject event = eventElement.getAsJsonObject();
+                    
+                    String bingoId = event.has("bingoId") ? event.get("bingoId").getAsString() : "";
+                    String name = event.has("name") ? event.get("name").getAsString() : "Unknown Event";
+                    String groupId = event.has("groupId") ? event.get("groupId").getAsString() : "";
+                    int durationDays = event.has("durationDays") ? event.get("durationDays").getAsInt() : 0;
+                    int daysRemaining = event.has("daysRemaining") ? event.get("daysRemaining").getAsInt() : 0;
+                    int totalTiles = event.has("totalTiles") ? event.get("totalTiles").getAsInt() : 25; // Default bingo size
+                    boolean isActive = event.has("isActive") ? event.get("isActive").getAsBoolean() : true;
+                    
+                    EventItem eventItem = new EventItem(bingoId, name, groupId, durationDays, daysRemaining, totalTiles, isActive);
+                    eventDropdown.addItem(eventItem);
+                }
                 
-                EventItem eventItem = new EventItem(bingoId, name, groupId, durationDays, daysRemaining, totalTiles, isActive);
-                eventDropdown.addItem(eventItem);
+                // Select first event by default
+                if (eventDropdown.getItemCount() > 0)
+                {
+                    eventDropdown.setSelectedIndex(0);
+                }
             }
-            
-            // Select first event by default
-            if (eventDropdown.getItemCount() > 0)
+            else
             {
-                eventDropdown.setSelectedIndex(0);
+                eventDropdown.addItem(new EventItem("", "No active events", "", 0, 0, 0, false));
             }
         }
-        else
+        catch (Exception e)
         {
-            eventDropdown.addItem(new EventItem("", "No active events", "", 0, 0, 0, false));
+            log.error("Error processing events data", e);
+            eventDropdown.removeAllItems();
+            eventDropdown.addItem(new EventItem("", "Error loading events", "", 0, 0, 0, false));
         }
     }
     

@@ -31,6 +31,7 @@ public class AuthPanel extends PluginPanel
     private final BingoConfig config;
     private final BingoService bingoService;
     private final Client client;
+    private final Runnable onAuthenticationSuccess;
     
     private JTextField rsnField;
     private JTextField discordIdField;
@@ -40,11 +41,12 @@ public class AuthPanel extends PluginPanel
     private JLabel instructionsLabel;
     private Timer rsnUpdateTimer;
     
-    public AuthPanel(BingoConfig config, BingoService bingoService, Client client)
+    public AuthPanel(BingoConfig config, BingoService bingoService, Client client, Runnable onAuthenticationSuccess)
     {
         this.config = config;
         this.bingoService = bingoService;
         this.client = client;
+        this.onAuthenticationSuccess = onAuthenticationSuccess;
         
         initializeComponents();
         setupLayout();
@@ -315,6 +317,9 @@ public class AuthPanel extends PluginPanel
                     
                     // Initialize the bingo service
                     bingoService.initialize();
+                    
+                    // Notify onAuthenticationSuccess
+                    onAuthenticationSuccess.run();
                 }
                 else
                 {
@@ -328,8 +333,9 @@ public class AuthPanel extends PluginPanel
     {
         try
         {
-            Desktop.getDesktop().browse(URI.create(config.profileUrl()));
-            log.info("Opened profile URL: {}", config.profileUrl());
+            String profileUrl = config.siteUrl() + "/profile";
+            Desktop.getDesktop().browse(URI.create(profileUrl));
+            log.info("Opened profile URL: {}", profileUrl);
         }
         catch (IOException e)
         {

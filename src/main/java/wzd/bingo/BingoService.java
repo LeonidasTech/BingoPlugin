@@ -2,6 +2,8 @@ package wzd.bingo;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonArray;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.util.ImageUtil;
@@ -84,6 +86,7 @@ public class BingoService
                 configManager.setConfiguration("bingo", "rsn", rsn);
                 configManager.setConfiguration("bingo", "discordId", discordId);
                 configManager.setConfiguration("bingo", "teamId", teamId);
+                configManager.setConfiguration("bingo", "isAuthenticated", true);
                 
                 isAuthenticated = true;
                 log.info("Authentication successful for RSN: {} (Team: {})", rsn, teamId);
@@ -440,20 +443,96 @@ public class BingoService
     }
 
     /**
-     * Get the configured profile URL
-     */
-    public String getProfileUrl()
-    {
-        return config.profileUrl();
-    }
-
-    /**
      * Legacy login method - deprecated
      */
     @Deprecated
     public Optional<String> login(String rsn)
     {
         log.warn("Deprecated login method called - use authenticateWithDiscord instead");
+        return Optional.empty();
+    }
+
+    /**
+     * Fetch active bingo events for the authenticated user
+     * @return Optional containing active events data if successful
+     */
+    public Optional<JsonObject> fetchActiveEvents()
+    {
+        String apiEndpoint = config.authApiUrl() + "/api/bingo/events/active";
+        
+        Request request = new Request.Builder()
+            .url(apiEndpoint)
+            .get()
+            .addHeader("Authorization", "Bearer " + config.jwtToken())
+            .build();
+        
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (response.isSuccessful() && response.body() != null)
+            {
+                String responseJson = response.body().string();
+                log.debug("Active events API response: {}", responseJson);
+                
+                // Check if response is empty or just a simple string
+                if (responseJson == null || responseJson.trim().isEmpty())
+                {
+                    log.warn("Empty response from active events API");
+                    return Optional.empty();
+                }
+                
+                // Try to parse as JsonObject, handle different response formats
+                try
+                {
+                    JsonElement element = gson.fromJson(responseJson, JsonElement.class);
+                    
+                    if (element.isJsonObject())
+                    {
+                        JsonObject eventsData = element.getAsJsonObject();
+                        log.info("Successfully fetched active events data");
+                        return Optional.of(eventsData);
+                    }
+                    else if (element.isJsonPrimitive())
+                    {
+                        // API returned a simple string/primitive - create mock response
+                        log.warn("API returned primitive response: {}", element.getAsString());
+                        JsonObject mockResponse = new JsonObject();
+                        mockResponse.addProperty("hasActiveEvent", false);
+                        mockResponse.add("activeEvents", new JsonArray());
+                        return Optional.of(mockResponse);
+                    }
+                    else
+                    {
+                        log.warn("Unexpected JSON response format from active events API");
+                        return Optional.empty();
+                    }
+                }
+                catch (Exception jsonException)
+                {
+                    log.error("Failed to parse active events JSON response: {}", responseJson, jsonException);
+                    // Return mock empty response to prevent UI crashes
+                    JsonObject mockResponse = new JsonObject();
+                    mockResponse.addProperty("hasActiveEvent", false);
+                    mockResponse.add("activeEvents", new JsonArray());
+                    return Optional.of(mockResponse);
+                }
+            }
+            else if (response.code() == 401)
+            {
+                log.warn("JWT token expired, authentication required");
+                isAuthenticated = false;
+                configManager.setConfiguration("bingo", "isAuthenticated", false);
+                return Optional.empty();
+            }
+            else
+            {
+                log.warn("Failed to fetch active events: HTTP {}", response.code());
+            }
+        }
+        catch (IOException e)
+        {
+            log.error("Active events request failed", e);
+        }
+        
         return Optional.empty();
     }
 } 

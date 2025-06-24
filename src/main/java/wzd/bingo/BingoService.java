@@ -26,7 +26,7 @@ import javax.imageio.ImageIO;
 public class BingoService
 {
     private static final String CONTENT_TYPE_JSON = "application/json";
-    private static final int HEARTBEAT_INTERVAL_SECONDS = 60;
+    private static final int HEARTBEAT_INTERVAL_SECONDS = 300; // 5 minutes instead of 1 minute
     
     @Inject
     private BingoConfig config;
@@ -40,6 +40,7 @@ public class BingoService
     private final Gson gson = new Gson();
     private ScheduledExecutorService heartbeatExecutor;
     private volatile boolean isAuthenticated = false;
+    private volatile long lastHeartbeatTime = 0;
     
     // Callback for JWT expiration
     private Runnable jwtExpirationCallback;
@@ -326,10 +327,18 @@ public class BingoService
             return; // Not authenticated
         }
         
+        // Prevent duplicate heartbeats within short time periods
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastHeartbeatTime < (HEARTBEAT_INTERVAL_SECONDS * 1000L * 0.8)) // 80% of interval
+        {
+            log.debug("Skipping heartbeat - too soon since last one");
+            return;
+        }
+        
         // Create request body
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("rsn", rsn);
-        requestBody.addProperty("timestamp", System.currentTimeMillis() / 1000);
+        requestBody.addProperty("timestamp", currentTime / 1000);
         
         RequestBody body = RequestBody.create(
             MediaType.get(CONTENT_TYPE_JSON),
@@ -347,7 +356,8 @@ public class BingoService
         {
             if (response.isSuccessful())
             {
-                log.debug("Heartbeat sent successfully for RSN: {}", rsn);
+                lastHeartbeatTime = currentTime;
+                log.debug("Heartbeat sent successfully for RSN: {} at {}", rsn, currentTime);
             }
             else if (response.code() == 401)
             {
@@ -365,6 +375,16 @@ public class BingoService
         }
     }
 
+    /**
+     * Send heartbeat immediately on user activity
+     */
+    public void sendHeartbeatOnActivity()
+    {
+        // Send heartbeat immediately when user performs an action
+        // but only if enough time has passed since last heartbeat
+        sendHeartbeat();
+    }
+    
     /**
      * Start sending periodic heartbeats
      */

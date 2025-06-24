@@ -174,6 +174,54 @@ public class BingoMainPanel extends PluginPanel
         return button;
     }
     
+    private JButton createImageIconButton(String imageName, String tooltip, Color backgroundColor)
+    {
+        JButton button = new JButton();
+        
+        try
+        {
+            // Load the image from resources
+            ImageIcon icon = new ImageIcon(ImageUtil.loadImageResource(getClass(), imageName));
+            // Scale the image to fit the button
+            Image scaledImage = icon.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH);
+            button.setIcon(new ImageIcon(scaledImage));
+        }
+        catch (Exception e)
+        {
+            log.warn("Failed to load image: {}, falling back to text", imageName);
+            button.setText("DC"); // Fallback text for Discord
+        }
+        
+        button.setBackground(backgroundColor);
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setBorder(BorderFactory.createEmptyBorder(8, 4, 8, 4));
+        button.setToolTipText(tooltip);
+        
+        // Enhanced hover effect
+        button.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseEntered(MouseEvent e)
+            {
+                if (button.isEnabled())
+                {
+                    button.setBackground(backgroundColor.brighter());
+                }
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e)
+            {
+                button.setBackground(backgroundColor);
+            }
+        });
+        
+        return button;
+    }
+    
     private JButton createPrimaryButton(String text)
     {
         JButton button = new JButton(text);
@@ -275,7 +323,7 @@ public class BingoMainPanel extends PluginPanel
         buttonPanel.setPreferredSize(new Dimension(0, 40)); // Remove max width constraint
         
         // Create all 4 buttons
-        JButton discordButton = createIconButton("💬", "Discord", new Color(114, 137, 218));
+        JButton discordButton = createImageIconButton("discord.png", "Discord", new Color(114, 137, 218));
         JButton websiteButton = createIconButton("🌐", "Website", BUTTON_COLOR);
         
         // Add buttons - each takes 25% width

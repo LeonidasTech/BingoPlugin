@@ -40,6 +40,37 @@ public class BingoService
     private final Gson gson = new Gson();
     private ScheduledExecutorService heartbeatExecutor;
     private volatile boolean isAuthenticated = false;
+    
+    // Callback for JWT expiration
+    private Runnable jwtExpirationCallback;
+
+    /**
+     * Set callback to be invoked when JWT expires
+     */
+    public void setJwtExpirationCallback(Runnable callback)
+    {
+        this.jwtExpirationCallback = callback;
+    }
+
+    /**
+     * Handle JWT expiration by clearing auth and triggering callback
+     */
+    private void handleJwtExpiration()
+    {
+        log.warn("Handling JWT token expiration - logging out user");
+        isAuthenticated = false;
+        configManager.setConfiguration("bingo", "jwtToken", "");
+        configManager.setConfiguration("bingo", "isAuthenticated", false);
+        
+        // Stop background services
+        stopHeartbeat();
+        
+        // Trigger callback to switch to auth panel
+        if (jwtExpirationCallback != null)
+        {
+            SwingUtilities.invokeLater(jwtExpirationCallback);
+        }
+    }
 
     /**
      * Authenticate user with Discord ID and RSN
@@ -145,7 +176,7 @@ public class BingoService
             else if (response.code() == 401)
             {
                 log.warn("JWT token expired, authentication required");
-                isAuthenticated = false;
+                handleJwtExpiration();
                 return Optional.empty();
             }
             else
@@ -194,7 +225,7 @@ public class BingoService
             else if (response.code() == 401)
             {
                 log.warn("JWT token expired, authentication required");
-                isAuthenticated = false;
+                handleJwtExpiration();
                 return Optional.empty();
             }
             else
@@ -266,7 +297,7 @@ public class BingoService
                 else if (response.code() == 401)
                 {
                     log.warn("JWT token expired during tile submission");
-                    isAuthenticated = false;
+                    handleJwtExpiration();
                 }
                 else
                 {
@@ -321,8 +352,7 @@ public class BingoService
             else if (response.code() == 401)
             {
                 log.warn("JWT token expired during heartbeat");
-                isAuthenticated = false;
-                stopHeartbeat();
+                handleJwtExpiration();
             }
             else
             {
@@ -547,8 +577,7 @@ public class BingoService
             else if (response.code() == 401)
             {
                 log.warn("JWT token expired, authentication required");
-                isAuthenticated = false;
-                configManager.setConfiguration("bingo", "isAuthenticated", false);
+                handleJwtExpiration();
                 return Optional.empty();
             }
             else if (response.code() == 404)

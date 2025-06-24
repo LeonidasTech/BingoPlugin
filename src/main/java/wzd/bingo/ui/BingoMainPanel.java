@@ -8,8 +8,10 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.util.ImageUtil;
+import wzd.bingo.BingoActivityHandler;
 import wzd.bingo.BingoConfig;
 import wzd.bingo.BingoService;
+import wzd.bingo.SignupStatus;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -42,6 +44,7 @@ public class BingoMainPanel extends PluginPanel
     private final BingoConfig config;
     private final BingoService bingoService;
     private final ConfigManager configManager;
+    private final BingoActivityHandler activityHandler;
     private final Runnable onLogout;
     
     private JComboBox<EventItem> eventDropdown;
@@ -64,14 +67,19 @@ public class BingoMainPanel extends PluginPanel
     private boolean isParticipatingInEvent = false;
     
     // Icon buttons
-    private JButton viewProfileButton;
     private JButton logoutButton;
+    private JButton settingsButton;
     
-    public BingoMainPanel(BingoConfig config, BingoService bingoService, ConfigManager configManager, Runnable onLogout)
+    // Settings overlay
+    private JPanel settingsOverlay;
+    private boolean settingsVisible = false;
+    
+    public BingoMainPanel(BingoConfig config, BingoService bingoService, ConfigManager configManager, BingoActivityHandler activityHandler, Runnable onLogout)
     {
         this.config = config;
         this.bingoService = bingoService;
         this.configManager = configManager;
+        this.activityHandler = activityHandler;
         this.onLogout = onLogout;
         
         // Set up JWT expiration callback for automatic logout
@@ -113,7 +121,7 @@ public class BingoMainPanel extends PluginPanel
         setBackground(ColorScheme.DARK_GRAY_COLOR);
         
         // Icon-based buttons with 25% width each
-        viewProfileButton = createIconButton("👤", "Profile", ACCENT_COLOR);
+        settingsButton = createIconButton("⚙️", "Settings", new Color(120, 120, 120));
         logoutButton = createIconButton("🚪", "Logout", new Color(180, 50, 50));
         
         // Enhanced event dropdown with better styling
@@ -511,12 +519,13 @@ public class BingoMainPanel extends PluginPanel
         // Add buttons - each takes 25% width
         buttonPanel.add(discordButton);
         buttonPanel.add(websiteButton);
-        buttonPanel.add(viewProfileButton);
+        buttonPanel.add(settingsButton);
         buttonPanel.add(logoutButton);
         
         // Set up event handlers for new buttons
         discordButton.addActionListener(e -> openDiscord());
         websiteButton.addActionListener(e -> openWebsite());
+        settingsButton.addActionListener(e -> toggleSettings());
         
         return buttonPanel;
     }
@@ -531,19 +540,80 @@ public class BingoMainPanel extends PluginPanel
             BorderFactory.createEmptyBorder(8, 8, 8, 8)
         ));
         
-        // Card title
+        // Title panel with refresh button
+        JPanel titlePanel = new JPanel(new BorderLayout());
+        titlePanel.setBackground(INFO_PANEL_COLOR);
+        
         JLabel titleLabel = new JLabel("Active Events");
         titleLabel.setForeground(ACCENT_COLOR);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 14f));
-        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        // Dropdown with reduced padding
-        eventDropdown.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Refresh button
+        JButton refreshButton = new JButton("🔄");
+        refreshButton.setBackground(new Color(80, 120, 160));
+        refreshButton.setForeground(Color.WHITE);
+        refreshButton.setFont(refreshButton.getFont().deriveFont(12f));
+        refreshButton.setFocusPainted(false);
+        refreshButton.setBorderPainted(false);
+        refreshButton.setPreferredSize(new Dimension(30, 25));
+        refreshButton.setToolTipText("Refresh events");
+        refreshButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        
+        // Refresh button hover effect
+        refreshButton.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                refreshButton.setBackground(new Color(100, 140, 180));
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e) {
+                refreshButton.setBackground(new Color(80, 120, 160));
+            }
+        });
+        
+        // Refresh button action
+        refreshButton.addActionListener(e -> {
+            refreshButton.setText("⟳"); // Show spinning icon
+            refreshButton.setEnabled(false);
+            
+            // Store currently selected event before refresh
+            EventItem currentlySelected = (EventItem) eventDropdown.getSelectedItem();
+            String selectedEventId = null;
+            if (currentlySelected != null && !currentlySelected.isEmpty() && 
+                !currentlySelected.getName().equals("Select an event..."))
+            {
+                selectedEventId = currentlySelected.getBingoId();
+                log.debug("Preserving selection for event: {} (ID: {})", currentlySelected.getName(), selectedEventId);
+            }
+            
+            final String eventIdToReselect = selectedEventId;
+            
+            // Call refreshActiveEventsWithCallback with restoration callback
+            refreshActiveEventsWithCallback(() -> {
+                // Try to reselect the previously selected event
+                if (eventIdToReselect != null)
+                {
+                    restoreEventSelection(eventIdToReselect);
+                }
+                
+                refreshButton.setText("🔄");
+                refreshButton.setEnabled(true);
+            });
+        });
+        
+        titlePanel.add(titleLabel, BorderLayout.WEST);
+        titlePanel.add(refreshButton, BorderLayout.EAST);
+        
+        // Create dropdown container to ensure proper alignment
+        JPanel dropdownContainer = new JPanel(new BorderLayout());
+        dropdownContainer.setBackground(INFO_PANEL_COLOR);
         eventDropdown.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        dropdownContainer.add(eventDropdown, BorderLayout.CENTER);
         
-        card.add(titleLabel);
+        card.add(titlePanel);
         card.add(Box.createVerticalStrut(6));
-        card.add(eventDropdown);
+        card.add(dropdownContainer);
         
         return card;
     }
@@ -618,6 +688,9 @@ public class BingoMainPanel extends PluginPanel
                 isParticipatingInEvent = true;
                 activityLogPanel.setVisible(true);
                 refreshActivityLog(selectedEvent.getBingoId());
+                
+                // Set activity handler to track this event
+                activityHandler.setParticipating(true, selectedEvent.getBingoId());
             }
             else
             {
@@ -628,6 +701,9 @@ public class BingoMainPanel extends PluginPanel
                 // Hide activity log and stop participating
                 isParticipatingInEvent = false;
                 activityLogPanel.setVisible(false);
+                
+                // Stop activity tracking
+                activityHandler.setParticipating(false, null);
             }
         });
         
@@ -650,9 +726,6 @@ public class BingoMainPanel extends PluginPanel
             }
         });
         
-        // Profile button handler
-        viewProfileButton.addActionListener(e -> openProfilePage());
-        
         // Logout button handler  
         logoutButton.addActionListener(e -> handleLogout());
     }
@@ -674,20 +747,7 @@ public class BingoMainPanel extends PluginPanel
         }
     }
     
-    private void openProfilePage()
-    {
-        try
-        {
-            String profileUrl = config.siteUrl() + "/profile";
-            Desktop.getDesktop().browse(URI.create(profileUrl));
-            log.info("Opened profile URL: {}", profileUrl);
-        }
-        catch (IOException e)
-        {
-            log.error("Failed to open profile URL", e);
-            updateStatus("Failed to open profile page", ERROR_COLOR);
-        }
-    }
+
     
     private void handleLogout()
     {
@@ -709,6 +769,11 @@ public class BingoMainPanel extends PluginPanel
     
     private void refreshActiveEvents()
     {
+        refreshActiveEventsWithCallback(null);
+    }
+    
+    private void refreshActiveEventsWithCallback(Runnable callback)
+    {
         updateStatus("Loading events...", ColorScheme.LIGHT_GRAY_COLOR);
         
         // Disable interactions while loading
@@ -725,7 +790,7 @@ public class BingoMainPanel extends PluginPanel
                 
                 if (eventsData.isPresent())
                 {
-                    updateEventDropdown(eventsData.get());
+                    updateEventDropdown(eventsData.get(), callback);
                     updateStatus("Events loaded successfully", SUCCESS_COLOR);
                 }
                 else
@@ -734,12 +799,23 @@ public class BingoMainPanel extends PluginPanel
                     eventDropdown.removeAllItems();
                     eventDropdown.addItem(new EventItem("", "No events available", "", 0, 0, 0, false, "", 0));
                     showEventDetails(false);
+                    
+                    // Run callback even if no events
+                    if (callback != null)
+                    {
+                        callback.run();
+                    }
                 }
             });
         }).start();
     }
     
     private void updateEventDropdown(JsonObject eventsData)
+    {
+        updateEventDropdown(eventsData, null);
+    }
+    
+    private void updateEventDropdown(JsonObject eventsData, Runnable callback)
     {
         eventDropdown.removeAllItems();
         
@@ -777,9 +853,17 @@ public class BingoMainPanel extends PluginPanel
                 }
             }
             
-            // Keep placeholder selected (no event selected by default)
-            eventDropdown.setSelectedIndex(0);
-            showEventDetails(false);
+            // Only reset to placeholder if no callback is provided (initial load)
+            if (callback == null)
+            {
+                eventDropdown.setSelectedIndex(0);
+                showEventDetails(false);
+            }
+            else
+            {
+                // Run the callback after dropdown has been populated
+                callback.run();
+            }
         }
         catch (Exception e)
         {
@@ -787,6 +871,12 @@ public class BingoMainPanel extends PluginPanel
             eventDropdown.removeAllItems();
             eventDropdown.addItem(new EventItem("", "Error loading events", "", 0, 0, 0, false, "", 0));
             showEventDetails(false);
+            
+            // Run callback even on error
+            if (callback != null)
+            {
+                callback.run();
+            }
         }
     }
     
@@ -823,21 +913,25 @@ public class BingoMainPanel extends PluginPanel
             }
             
             int totalTiles = getIntField(event, "totalTiles", "totaltiles", 25); // Default to 25
-            int participants = getIntField(event, "participants", "participants", 0); // Default to 0
+            int participants = getIntField(event, "participants", "participantCount", 0); // Default to 0
+            
+            // Debug logging for participants field
+            log.debug("Event '{}' participants data: raw={}, parsed={}", name, 
+                event.has("participants") ? event.get("participants") : "missing", participants);
             
             EventItem eventItem = new EventItem(bingoId, name, groupId, durationDays, daysRemaining, totalTiles, isActive, prizePool, participants);
             eventDropdown.addItem(eventItem);
-            log.info("Added event to dropdown: {} (Active: {})", name, isActive);
+            log.info("Added event to dropdown: {} (Active: {}, Participants: {})", name, isActive, participants);
         }
     }
     
     private String getStringField(JsonObject obj, String primaryKey, String fallbackKey)
     {
-        if (obj.has(primaryKey))
+        if (obj.has(primaryKey) && !obj.get(primaryKey).isJsonNull())
         {
             return obj.get(primaryKey).getAsString();
         }
-        else if (obj.has(fallbackKey))
+        else if (obj.has(fallbackKey) && !obj.get(fallbackKey).isJsonNull())
         {
             return obj.get(fallbackKey).getAsString();
         }
@@ -851,11 +945,11 @@ public class BingoMainPanel extends PluginPanel
     
     private int getIntField(JsonObject obj, String primaryKey, String fallbackKey, int defaultValue)
     {
-        if (obj.has(primaryKey))
+        if (obj.has(primaryKey) && !obj.get(primaryKey).isJsonNull())
         {
             return obj.get(primaryKey).getAsInt();
         }
-        else if (obj.has(fallbackKey))
+        else if (obj.has(fallbackKey) && !obj.get(fallbackKey).isJsonNull())
         {
             return obj.get(fallbackKey).getAsInt();
         }
@@ -864,11 +958,11 @@ public class BingoMainPanel extends PluginPanel
     
     private boolean getBooleanField(JsonObject obj, String primaryKey, String fallbackKey)
     {
-        if (obj.has(primaryKey))
+        if (obj.has(primaryKey) && !obj.get(primaryKey).isJsonNull())
         {
             return obj.get(primaryKey).getAsBoolean();
         }
-        else if (obj.has(fallbackKey))
+        else if (obj.has(fallbackKey) && !obj.get(fallbackKey).isJsonNull())
         {
             return obj.get(fallbackKey).getAsBoolean();
         }
@@ -882,7 +976,55 @@ public class BingoMainPanel extends PluginPanel
         eventNameLabel.setForeground(ACCENT_COLOR);
         eventNameLabel.setFont(eventNameLabel.getFont().deriveFont(Font.BOLD, 14f));
         
-        totalParticipantsLabel.setText("👥 Participants: " + event.getParticipants());
+        // Check signup status asynchronously
+        new Thread(() -> {
+            try
+            {
+                SignupStatus signupStatus = bingoService.getSignupStatusForEvent(event.getBingoId());
+                SwingUtilities.invokeLater(() -> {
+                    String signupText;
+                    Color signupColor;
+                    
+                    if (signupStatus.isSignedUp() && signupStatus.isAccepted())
+                    {
+                        signupText = " [Signed up & Accepted]";
+                        signupColor = SUCCESS_COLOR;
+                    }
+                    else if (signupStatus.isSignedUp())
+                    {
+                        signupText = " [Signed up]";
+                        signupColor = new Color(255, 165, 0); // Orange for pending acceptance
+                    }
+                    else
+                    {
+                        signupText = " [Not signed up]";
+                        signupColor = ERROR_COLOR;
+                    }
+                    
+                    totalParticipantsLabel.setText("<html>👥 Participants: " + event.getParticipants() + 
+                        "<span style='color: " + String.format("#%06X", signupColor.getRGB() & 0xFFFFFF) + "'>" + 
+                        signupText + "</span></html>");
+                });
+            }
+            catch (Exception e)
+            {
+                log.warn("Failed to check signup status for event {}: {}", event.getBingoId(), e.getMessage());
+                SwingUtilities.invokeLater(() -> {
+                    // Show different message based on error type
+                    String statusText;
+                    if (e.getMessage() != null && e.getMessage().contains("500"))
+                    {
+                        statusText = " [Server error - try later]";
+                    }
+                    else
+                    {
+                        statusText = " [Status unknown]";
+                    }
+                    totalParticipantsLabel.setText("👥 Participants: " + event.getParticipants() + statusText);
+                });
+            }
+        }).start();
+        
         String prizeText = event.getPrizePool();
         if (prizeText == null || prizeText.isEmpty()) {
             prizeText = "To be announced";
@@ -915,6 +1057,36 @@ public class BingoMainPanel extends PluginPanel
     {
         statusLabel.setText("ℹ️ " + message);
         statusLabel.setForeground(color);
+    }
+    
+    /**
+     * Attempts to restore the selection to an event with the given ID after refresh
+     * @param eventId The bingo ID of the event to reselect
+     */
+    private void restoreEventSelection(String eventId)
+    {
+        try
+        {
+            // Search through the dropdown items to find matching event
+            for (int i = 0; i < eventDropdown.getItemCount(); i++)
+            {
+                EventItem item = eventDropdown.getItemAt(i);
+                if (item != null && eventId.equals(item.getBingoId()))
+                {
+                    log.debug("Restoring selection to event: {} at index {}", item.getName(), i);
+                    eventDropdown.setSelectedIndex(i);
+                    return; // Event found and selected
+                }
+            }
+            
+            // If we get here, the event was not found in the refreshed list
+            log.info("Previously selected event (ID: {}) no longer exists in active events", eventId);
+            // Let the dropdown stay on "Select an event..." (index 0)
+        }
+        catch (Exception e)
+        {
+            log.warn("Error restoring event selection: {}", e.getMessage());
+        }
     }
     
     private void startEventRefreshTimer()
@@ -1003,8 +1175,14 @@ public class BingoMainPanel extends PluginPanel
             {
                 // Add a placeholder entry
                 ActivityLogEntry placeholder = new ActivityLogEntry("", "INFO", "", "", 0, "", "", 
-                    "No recent activity. Start participating to see your team's progress!", 0);
+                    "No recent activity.", 0);
+                ActivityLogEntry placeholder2 = new ActivityLogEntry("", "INFO", "", "", 0, "", "",
+                        "Start participating to see your team's", 0);
+                ActivityLogEntry placeholder3 = new ActivityLogEntry("", "INFO", "", "", 0, "", "",
+                        "progress!", 0);
                 activityListModel.addElement(placeholder);
+                activityListModel.addElement(placeholder2);
+                activityListModel.addElement(placeholder3);
             }
             
             // Scroll to bottom to show latest activity
@@ -1066,6 +1244,149 @@ public class BingoMainPanel extends PluginPanel
             log.error("Failed to open website URL", e);
             updateStatus("Failed to open website", ERROR_COLOR);
         }
+    }
+    
+    private void toggleSettings()
+    {
+        settingsVisible = !settingsVisible;
+        
+        if (settingsVisible)
+        {
+            showSettingsOverlay();
+        }
+        else
+        {
+            hideSettingsOverlay();
+        }
+    }
+    
+    private void showSettingsOverlay()
+    {
+        if (settingsOverlay == null)
+        {
+            createSettingsOverlay();
+        }
+        else
+        {
+            // Update overlay bounds to current panel size
+            settingsOverlay.setBounds(0, 0, this.getWidth(), this.getHeight());
+            
+            // Update modal background bounds
+            Component modalBackground = settingsOverlay.getComponent(0);
+            modalBackground.setBounds(0, 0, this.getWidth(), this.getHeight());
+            
+            // Update settings panel position
+            JPanel settingsPanel = (JPanel) settingsOverlay.getComponent(1);
+            int panelWidth = 300;
+            int panelHeight = 250;
+            int x = (this.getWidth() - panelWidth) / 2;
+            int y = (this.getHeight() - panelHeight) / 2;
+            settingsPanel.setBounds(x, y, panelWidth, panelHeight);
+        }
+        
+        // Add overlay to the main panel if not already added
+        if (settingsOverlay.getParent() != this)
+        {
+            this.add(settingsOverlay);
+        }
+        
+        this.setComponentZOrder(settingsOverlay, 0);
+        settingsOverlay.setVisible(true);
+        this.revalidate();
+        this.repaint();
+    }
+    
+    private void hideSettingsOverlay()
+    {
+        if (settingsOverlay != null)
+        {
+            settingsOverlay.setVisible(false);
+            this.revalidate();
+            this.repaint();
+        }
+    }
+    
+    private void createSettingsOverlay()
+    {
+        settingsOverlay = new JPanel();
+        settingsOverlay.setLayout(null); // Use absolute positioning
+        settingsOverlay.setOpaque(false); // Make transparent so content shows through
+        settingsOverlay.setBounds(0, 0, this.getWidth(), this.getHeight());
+        
+        // Create modal background
+        JPanel modalBackground = new JPanel();
+        modalBackground.setBackground(new Color(0, 0, 0, 100)); // Semi-transparent
+        modalBackground.setBounds(0, 0, this.getWidth(), this.getHeight());
+        
+        // Create settings panel
+        JPanel settingsPanel = new JPanel();
+        settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
+        settingsPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        settingsPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ACCENT_COLOR, 2),
+            BorderFactory.createEmptyBorder(15, 15, 15, 15)
+        ));
+        
+        // Center the settings panel
+        int panelWidth = 300;
+        int panelHeight = 250;
+        int x = (this.getWidth() - panelWidth) / 2;
+        int y = (this.getHeight() - panelHeight) / 2;
+        settingsPanel.setBounds(x, y, panelWidth, panelHeight);
+        
+        // Title
+        JLabel titleLabel = new JLabel("Settings");
+        titleLabel.setForeground(ACCENT_COLOR);
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 16f));
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
+        // Auto-refresh toggle
+        JCheckBox autoRefreshToggle = new JCheckBox("Auto-refresh");
+        autoRefreshToggle.setSelected(true); // Default enabled
+        autoRefreshToggle.setForeground(Color.WHITE);
+        autoRefreshToggle.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        autoRefreshToggle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        // Scroll-on-refresh toggle
+        JCheckBox scrollOnRefreshToggle = new JCheckBox("Scroll to bottom on refresh");
+        scrollOnRefreshToggle.setSelected(true); // Default enabled
+        scrollOnRefreshToggle.setForeground(Color.WHITE);
+        scrollOnRefreshToggle.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        scrollOnRefreshToggle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        // Refresh timer input
+        JLabel timerLabel = new JLabel("Refresh interval (seconds):");
+        timerLabel.setForeground(Color.WHITE);
+        timerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        JTextField timerField = new JTextField("30");
+        timerField.setMaximumSize(new Dimension(100, 25));
+        timerField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        // Close button
+        JButton closeButton = createPrimaryButton("Close");
+        closeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        closeButton.addActionListener(e -> hideSettingsOverlay());
+        
+        // Add components to settings panel
+        settingsPanel.add(titleLabel);
+        settingsPanel.add(Box.createVerticalStrut(15));
+        settingsPanel.add(autoRefreshToggle);
+        settingsPanel.add(Box.createVerticalStrut(10));
+        settingsPanel.add(scrollOnRefreshToggle);
+        settingsPanel.add(Box.createVerticalStrut(10));
+        settingsPanel.add(timerLabel);
+        settingsPanel.add(Box.createVerticalStrut(5));
+        settingsPanel.add(timerField);
+        settingsPanel.add(Box.createVerticalStrut(20));
+        settingsPanel.add(closeButton);
+        
+        // Add components to overlay
+        settingsOverlay.add(modalBackground);
+        settingsOverlay.add(settingsPanel);
+        
+        // Add to main panel
+        this.add(settingsOverlay);
     }
     
     // Custom renderer for activity log list
@@ -1215,7 +1536,7 @@ public class BingoMainPanel extends PluginPanel
                         formattedTime, playerRsn, abbreviateName(monsterName), totalKc);
                     
                 case "RAID_COMPLETION":
-                    return String.format("[%s] %s - %s Raid (%dkc)", 
+                    return String.format("[%s] %s - %s (%dkc)", 
                         formattedTime, playerRsn, abbreviateName(monsterName), totalKc);
                     
                 case "DROP":

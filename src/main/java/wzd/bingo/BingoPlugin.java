@@ -43,6 +43,9 @@ public class BingoPlugin extends Plugin
     @Inject
     private BingoService bingoService;
     
+    @Inject
+    private BingoActivityHandler activityHandler;
+    
     private NavigationButton navButton;
     private AuthPanel authPanel;
     private BingoMainPanel mainPanel;
@@ -145,7 +148,7 @@ public class BingoPlugin extends Plugin
     {
         if (mainPanel == null)
         {
-            mainPanel = new BingoMainPanel(config, bingoService, configManager, this::onLogout);
+            mainPanel = new BingoMainPanel(config, bingoService, configManager, activityHandler, this::onLogout);
         }
         
         switchToPanel(mainPanel);

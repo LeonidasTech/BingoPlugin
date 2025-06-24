@@ -714,4 +714,210 @@ public class BingoService
         
         return Optional.empty();
     }
+    
+    /**
+     * Check if the user is signed up for a specific bingo event
+     * @param bingoId The bingo event ID
+     * @return true if user is signed up, false otherwise
+     */
+    public boolean isSignedUpForEvent(String bingoId)
+    {
+        SignupStatus status = getSignupStatusForEvent(bingoId);
+        return status.isSignedUp();
+    }
+    
+    /**
+     * Get detailed signup status for a specific bingo event
+     * @param bingoId The bingo event ID
+     * @return SignupStatus object with signup details
+     */
+    public SignupStatus getSignupStatusForEvent(String bingoId)
+    {
+        String apiEndpoint = config.authApiUrl() + "/api/bingo/signup/status/" + bingoId + "?rsn=" + config.rsn();
+        
+        Request request = new Request.Builder()
+            .url(apiEndpoint)
+            .get()
+            .addHeader("Authorization", "Bearer " + config.jwtToken())
+            .addHeader("Accept", "application/json")
+            .build();
+        
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (response.isSuccessful() && response.body() != null)
+            {
+                String responseBody = response.body().string();
+                log.debug("Signup status response length: {} chars", responseBody.length());
+                
+                // Check if response is HTML (common when API returns error pages or wrong endpoints)
+                String trimmedResponse = responseBody.trim();
+                if (trimmedResponse.startsWith("<!") || trimmedResponse.startsWith("<html"))
+                {
+                    log.warn("Signup status API returned HTML instead of JSON. This indicates the endpoint may not exist or there's a routing issue.");
+                    log.warn("API endpoint used: {}", apiEndpoint);
+                    log.warn("Response preview: {}", trimmedResponse.length() > 200 ? trimmedResponse.substring(0, 200) + "..." : trimmedResponse);
+                    return new SignupStatus(false, false, "API returned HTML"); // Default to not signed up when API returns HTML
+                }
+                
+                try
+                {
+                    JsonObject signupData = gson.fromJson(responseBody, JsonObject.class);
+                    
+                    if (signupData.has("signedUp"))
+                    {
+                        boolean isSignedUp = signupData.get("signedUp").getAsBoolean();
+                        boolean isAccepted = signupData.has("accepted") ? signupData.get("accepted").getAsBoolean() : false;
+                        String message = signupData.has("message") ? signupData.get("message").getAsString() : "";
+                        
+                        log.debug("Signup status for event {}: signedUp={}, accepted={}", bingoId, isSignedUp, isAccepted);
+                        return new SignupStatus(isSignedUp, isAccepted, message);
+                    }
+                }
+                catch (Exception jsonException)
+                {
+                    log.warn("Failed to parse signup status response as JSON: {}", responseBody.length() > 200 ? responseBody.substring(0, 200) + "..." : responseBody);
+                    // Try to handle as primitive boolean response
+                    if ("true".equalsIgnoreCase(responseBody.trim()) || "false".equalsIgnoreCase(responseBody.trim()))
+                    {
+                        boolean isSignedUp = Boolean.parseBoolean(responseBody.trim());
+                        log.debug("Parsed signup status as primitive boolean: {}", isSignedUp);
+                        return new SignupStatus(isSignedUp, false, ""); // Default accepted to false for primitive response
+                    }
+                }
+            }
+            else if (response.code() == 401)
+            {
+                log.warn("JWT token expired while checking signup status");
+                handleJwtExpiration();
+            }
+            else if (response.code() == 404)
+            {
+                log.warn("Signup status API endpoint not found (404). Check if the endpoint '/api/bingo/signup/status/{}' is implemented on the backend.", bingoId);
+                log.warn("Full URL attempted: {}", apiEndpoint);
+            }
+            else
+            {
+                log.warn("Failed to check signup status: HTTP {} - {}", response.code(), response.message());
+                log.warn("API endpoint: {}", apiEndpoint);
+                
+                // Log response body for 500 errors to help with debugging
+                if (response.code() == 500 && response.body() != null)
+                {
+                    try
+                    {
+                        String errorBody = response.body().string();
+                        log.warn("Server error response body: {}", errorBody.length() > 500 ? errorBody.substring(0, 500) + "..." : errorBody);
+                    }
+                    catch (Exception e)
+                    {
+                        log.warn("Could not read error response body: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            log.error("Error checking signup status for event {}", bingoId, e);
+        }
+        
+        return new SignupStatus(false, false, "Unknown error"); // Default to not signed up
+    }
+    
+    /**
+     * Retrieve the Imgur client ID from the API
+     * @return The Imgur client ID if successful, null otherwise
+     */
+    public String getImgurClientId()
+    {
+        String apiEndpoint = config.authApiUrl() + "/api/secrets/imgur_client_id";
+        
+        Request request = new Request.Builder()
+            .url(apiEndpoint)
+            .get()
+            .addHeader("Authorization", "Bearer " + config.jwtToken())
+            .addHeader("Accept", "application/json")
+            .build();
+        
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (response.isSuccessful() && response.body() != null)
+            {
+                String responseBody = response.body().string();
+                log.debug("Imgur client ID response length: {} chars", responseBody.length());
+                
+                // Check if response is HTML (common when API returns error pages or wrong endpoints)
+                String trimmedResponse = responseBody.trim();
+                if (trimmedResponse.startsWith("<!") || trimmedResponse.startsWith("<html"))
+                {
+                    log.warn("Imgur client ID API returned HTML instead of JSON. This indicates the endpoint may not exist or there's a routing issue.");
+                    log.warn("API endpoint used: {}", apiEndpoint);
+                    log.warn("Response preview: {}", trimmedResponse.length() > 200 ? trimmedResponse.substring(0, 200) + "..." : trimmedResponse);
+                    return null; // No client ID available when API returns HTML
+                }
+                
+                try
+                {
+                    JsonObject secretData = gson.fromJson(responseBody, JsonObject.class);
+                    
+                    if (secretData.has("success") && secretData.get("success").getAsBoolean() && secretData.has("value"))
+                    {
+                        String clientId = secretData.get("value").getAsString();
+                        log.debug("Successfully retrieved Imgur client ID");
+                        return clientId;
+                    }
+                }
+                catch (Exception jsonException)
+                {
+                    log.warn("Failed to parse Imgur client ID response as JSON: {}", responseBody.length() > 200 ? responseBody.substring(0, 200) + "..." : responseBody);
+                    // Try to handle as direct string response
+                    String trimmed = responseBody.trim();
+                    if (trimmed.length() > 0 && !trimmed.startsWith("{") && !trimmed.startsWith("[") && !trimmed.startsWith("<!"))
+                    {
+                        // Remove quotes if present
+                        if (trimmed.startsWith("\"") && trimmed.endsWith("\""))
+                        {
+                            trimmed = trimmed.substring(1, trimmed.length() - 1);
+                        }
+                        log.debug("Parsed Imgur client ID as primitive string: {}", trimmed);
+                        return trimmed;
+                    }
+                }
+            }
+            else if (response.code() == 401)
+            {
+                log.warn("JWT token expired while retrieving Imgur client ID");
+                handleJwtExpiration();
+            }
+            else if (response.code() == 404)
+            {
+                log.warn("Imgur client ID API endpoint not found (404). Check if the endpoint '/api/secrets/imgur_client_id' is implemented on the backend.");
+                log.warn("Full URL attempted: {}", apiEndpoint);
+            }
+            else
+            {
+                log.warn("Failed to retrieve Imgur client ID: HTTP {} - {}", response.code(), response.message());
+                log.warn("API endpoint: {}", apiEndpoint);
+                
+                // Log response body for 500 errors to help with debugging
+                if (response.code() == 500 && response.body() != null)
+                {
+                    try
+                    {
+                        String errorBody = response.body().string();
+                        log.warn("Server error response body: {}", errorBody.length() > 500 ? errorBody.substring(0, 500) + "..." : errorBody);
+                    }
+                    catch (Exception e)
+                    {
+                        log.warn("Could not read error response body: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            log.error("Error retrieving Imgur client ID", e);
+        }
+        
+        return null;
+    }
 } 

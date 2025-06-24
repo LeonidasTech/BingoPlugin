@@ -23,6 +23,8 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 @Slf4j
 public class BingoMainPanel extends PluginPanel
@@ -52,6 +54,14 @@ public class BingoMainPanel extends PluginPanel
     private JButton viewBoardButton;
     private JLabel statusLabel;
     private Timer eventRefreshTimer;
+    private Timer activityRefreshTimer;
+    
+    // Activity log components
+    private JScrollPane activityLogPanel; // Now directly using scroll pane
+    private JScrollPane activityScrollPane;
+    private JList<ActivityLogEntry> activityList;
+    private DefaultListModel<ActivityLogEntry> activityListModel;
+    private boolean isParticipatingInEvent = false;
     
     // Icon buttons
     private JButton viewProfileButton;
@@ -82,6 +92,9 @@ public class BingoMainPanel extends PluginPanel
         
         // Start periodic event refresh (every 5 minutes)
         startEventRefreshTimer();
+        
+        // Start activity log refresh (every 30 seconds)
+        startActivityRefreshTimer();
         
         // Load initial data
         refreshActiveEvents();
@@ -130,6 +143,9 @@ public class BingoMainPanel extends PluginPanel
         statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         statusLabel.setFont(statusLabel.getFont().deriveFont(Font.ITALIC, 12f));
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        
+        // Initialize activity log components
+        initializeActivityLog();
     }
     
     private JLabel createStyledInfoLabel(String text)
@@ -138,6 +154,49 @@ public class BingoMainPanel extends PluginPanel
         label.setForeground(Color.WHITE);
         label.setFont(label.getFont().deriveFont(13f));
         return label;
+    }
+    
+    private void initializeActivityLog()
+    {
+        // Create activity log list model and list
+        activityListModel = new DefaultListModel<>();
+        activityList = new JList<>(activityListModel);
+        activityList.setBackground(new Color(35, 35, 35));
+        activityList.setForeground(Color.WHITE);
+        activityList.setFont(new Font("Monospaced", Font.PLAIN, 9));
+        activityList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        activityList.setCellRenderer(new ActivityLogCellRenderer());
+        
+        // Add mouse listener for screenshot links
+        activityList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int index = activityList.locationToIndex(e.getPoint());
+                if (index >= 0) {
+                    ActivityLogEntry entry = activityListModel.getElementAt(index);
+                    if (entry.hasScreenshot()) {
+                        openScreenshot(entry.getScreenshotUrl());
+                    }
+                }
+            }
+        });
+        
+        // Create scroll pane for activity log with direct styling
+        activityScrollPane = new JScrollPane(activityList);
+        activityScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        activityScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        activityScrollPane.setPreferredSize(new Dimension(0, 180));
+        activityScrollPane.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(CARD_BORDER_COLOR, 1),
+            BorderFactory.createEmptyBorder(3, 3, 3, 3)
+        ));
+        activityScrollPane.setBackground(INFO_PANEL_COLOR);
+        
+        // Use scroll pane directly as activity log panel (remove wrapper)
+        activityLogPanel = activityScrollPane;
+        
+        // Initially hide the activity log
+        activityLogPanel.setVisible(false);
     }
     
     private JButton createIconButton(String icon, String tooltip, Color backgroundColor)
@@ -222,6 +281,120 @@ public class BingoMainPanel extends PluginPanel
         return button;
     }
     
+    private void openScreenshot(String screenshotUrl)
+    {
+        // Check if user has disabled screenshot confirmation
+        Boolean neverAskAgainObj = configManager.getConfiguration("bingo", "neverAskScreenshot", Boolean.class);
+        boolean neverAskAgain = neverAskAgainObj != null && neverAskAgainObj;
+        
+        if (neverAskAgain)
+        {
+            // Open directly without asking
+            openScreenshotDirect(screenshotUrl);
+        }
+        else
+        {
+            // Show confirmation dialog
+            showScreenshotConfirmationDialog(screenshotUrl);
+        }
+    }
+    
+    private void openScreenshotDirect(String screenshotUrl)
+    {
+        try
+        {
+            Desktop.getDesktop().browse(URI.create(screenshotUrl));
+            log.info("Opened screenshot URL: {}", screenshotUrl);
+        }
+        catch (IOException e)
+        {
+            log.error("Failed to open screenshot URL: {}", screenshotUrl, e);
+            updateStatus("Failed to open screenshot", ERROR_COLOR);
+        }
+    }
+    
+    private void showScreenshotConfirmationDialog(String screenshotUrl)
+    {
+        JDialog dialog = new JDialog();
+        dialog.setTitle("Open Screenshot");
+        dialog.setModal(true);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        dialog.setSize(400, 150);
+        dialog.setLocationRelativeTo(this);
+        
+        // Set dark theme for dialog
+        dialog.getContentPane().setBackground(ColorScheme.DARK_GRAY_COLOR);
+        
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+        
+        // Message label
+        JLabel messageLabel = new JLabel("Are you sure you wish to open the screenshot?");
+        messageLabel.setForeground(Color.WHITE);
+        messageLabel.setFont(messageLabel.getFont().deriveFont(13f));
+        messageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        
+        // Never ask again checkbox
+        JCheckBox neverAskCheckbox = new JCheckBox("Never ask again");
+        neverAskCheckbox.setForeground(Color.WHITE);
+        neverAskCheckbox.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        neverAskCheckbox.setFont(neverAskCheckbox.getFont().deriveFont(12f));
+        
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        buttonPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        
+        JButton yesButton = new JButton("Yes");
+        yesButton.setBackground(SUCCESS_COLOR);
+        yesButton.setForeground(Color.WHITE);
+        yesButton.setFocusPainted(false);
+        yesButton.setBorderPainted(false);
+        yesButton.setPreferredSize(new Dimension(80, 30));
+        
+        JButton noButton = new JButton("No");
+        noButton.setBackground(ERROR_COLOR);
+        noButton.setForeground(Color.WHITE);
+        noButton.setFocusPainted(false);
+        noButton.setBorderPainted(false);
+        noButton.setPreferredSize(new Dimension(80, 30));
+        
+        // Button actions
+        yesButton.addActionListener(e -> {
+            if (neverAskCheckbox.isSelected())
+            {
+                configManager.setConfiguration("bingo", "neverAskScreenshot", true);
+                log.info("User enabled 'never ask again' for screenshots");
+            }
+            dialog.dispose();
+            openScreenshotDirect(screenshotUrl);
+        });
+        
+        noButton.addActionListener(e -> {
+            if (neverAskCheckbox.isSelected())
+            {
+                configManager.setConfiguration("bingo", "neverAskScreenshot", true);
+                log.info("User enabled 'never ask again' for screenshots");
+            }
+            dialog.dispose();
+        });
+        
+        buttonPanel.add(yesButton);
+        buttonPanel.add(noButton);
+        
+        // Checkbox panel
+        JPanel checkboxPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        checkboxPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        checkboxPanel.add(neverAskCheckbox);
+        
+        mainPanel.add(messageLabel, BorderLayout.NORTH);
+        mainPanel.add(checkboxPanel, BorderLayout.CENTER);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        dialog.add(mainPanel);
+        dialog.setVisible(true);
+    }
+    
     private JButton createPrimaryButton(String text)
     {
         JButton button = new JButton(text);
@@ -299,16 +472,25 @@ public class BingoMainPanel extends PluginPanel
         gbc.insets = new Insets(0, 0, 10, 0);
         mainPanel.add(eventInfoPanel, gbc);
         
-        // Action buttons panel
-        JPanel actionPanel = createActionPanel();
+        // Activity log panel (initially hidden)
         gbc.gridy = 3;
         gbc.insets = new Insets(0, 0, 8, 0);
+        gbc.weighty = 0.6; // Give activity log some vertical space
+        gbc.fill = GridBagConstraints.BOTH;
+        mainPanel.add(activityLogPanel, gbc);
+        
+        // Action buttons panel (moved below activity log)
+        JPanel actionPanel = createActionPanel();
+        gbc.gridy = 4;
+        gbc.insets = new Insets(0, 0, 8, 0);
+        gbc.weighty = 0.0; // Reset weight for button panel
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         mainPanel.add(actionPanel, gbc);
         
         // Status panel
         JPanel statusPanelBottom = createStatusPanel();
-        gbc.gridy = 4;
-        gbc.weighty = 1.0;
+        gbc.gridy = 5;
+        gbc.weighty = 0.1; // Reduce status panel weight to give room for activity log
         gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(0, 0, 0, 0);
         mainPanel.add(statusPanelBottom, gbc);
@@ -426,17 +608,26 @@ public class BingoMainPanel extends PluginPanel
         // Event dropdown selection
         eventDropdown.addActionListener(e -> {
             EventItem selectedEvent = (EventItem) eventDropdown.getSelectedItem();
-            if (selectedEvent != null && !selectedEvent.isEmpty())
+            if (selectedEvent != null && !selectedEvent.isEmpty() && !selectedEvent.getName().equals("Select an event..."))
             {
                 updateEventInfo(selectedEvent);
                 showEventDetails(true);
                 viewBoardButton.setEnabled(true);
+                
+                // Show activity log and start participating
+                isParticipatingInEvent = true;
+                activityLogPanel.setVisible(true);
+                refreshActivityLog(selectedEvent.getBingoId());
             }
             else
             {
                 clearEventInfo();
                 showEventDetails(false);
                 viewBoardButton.setEnabled(false);
+                
+                // Hide activity log and stop participating
+                isParticipatingInEvent = false;
+                activityLogPanel.setVisible(false);
             }
         });
         
@@ -733,11 +924,115 @@ public class BingoMainPanel extends PluginPanel
         eventRefreshTimer.start();
     }
     
+    private void startActivityRefreshTimer()
+    {
+        // Refresh activity log every 30 seconds
+        activityRefreshTimer = new Timer(30 * 1000, e -> {
+            if (isParticipatingInEvent)
+            {
+                EventItem selectedEvent = (EventItem) eventDropdown.getSelectedItem();
+                if (selectedEvent != null && !selectedEvent.isEmpty())
+                {
+                    refreshActivityLog(selectedEvent.getBingoId());
+                }
+            }
+        });
+        activityRefreshTimer.start();
+    }
+    
+    private void refreshActivityLog(String bingoId)
+    {
+        // Fetch activity log from backend in a background thread
+        new Thread(() -> {
+            try
+            {
+                Optional<JsonObject> activityData = bingoService.fetchActivityLog(bingoId);
+                if (activityData.isPresent())
+                {
+                    SwingUtilities.invokeLater(() -> updateActivityLog(activityData.get()));
+                }
+            }
+            catch (Exception e)
+            {
+                log.error("Failed to fetch activity log", e);
+                SwingUtilities.invokeLater(() -> {
+                    activityListModel.clear();
+                    ActivityLogEntry errorEntry = new ActivityLogEntry("", "ERROR", "", "", 0, "", "", 
+                        "Failed to load activity log. Check connection.", 0);
+                    activityListModel.addElement(errorEntry);
+                });
+            }
+        }).start();
+    }
+    
+    private void updateActivityLog(JsonObject activityData)
+    {
+        try
+        {
+            SimpleDateFormat formatter = new SimpleDateFormat("HH:mm-dd/MM");
+            activityListModel.clear();
+            
+            if (activityData.has("activities"))
+            {
+                JsonArray activities = activityData.getAsJsonArray("activities");
+                for (JsonElement activityElement : activities)
+                {
+                    JsonObject activity = activityElement.getAsJsonObject();
+                    
+                    String playerRsn = activity.get("playerRsn").getAsString();
+                    String activityType = activity.get("activityType").getAsString();
+                    String timestamp = activity.get("timestamp").getAsString();
+                    String monsterName = activity.has("monsterName") ? activity.get("monsterName").getAsString() : "";
+                    String dropName = activity.has("dropName") && !activity.get("dropName").isJsonNull() ? activity.get("dropName").getAsString() : "";
+                    int totalKc = activity.has("totalKc") ? activity.get("totalKc").getAsInt() : 0;
+                    String screenshotUrl = activity.has("screenshotUrl") && !activity.get("screenshotUrl").isJsonNull() ? activity.get("screenshotUrl").getAsString() : "";
+                    int teamId = activity.has("teamId") ? activity.get("teamId").getAsInt() : 0;
+                    
+                    // Parse timestamp and format
+                    Date date = new Date(Long.parseLong(timestamp) * 1000);
+                    String formattedTime = formatter.format(date);
+                    
+                    ActivityLogEntry entry = new ActivityLogEntry(playerRsn, activityType, monsterName, 
+                        dropName, totalKc, screenshotUrl, timestamp, formattedTime, teamId);
+                    
+                    activityListModel.addElement(entry);
+                }
+            }
+            
+            if (activityListModel.isEmpty())
+            {
+                // Add a placeholder entry
+                ActivityLogEntry placeholder = new ActivityLogEntry("", "INFO", "", "", 0, "", "", 
+                    "No recent activity. Start participating to see your team's progress!", 0);
+                activityListModel.addElement(placeholder);
+            }
+            
+            // Scroll to bottom to show latest activity
+            SwingUtilities.invokeLater(() -> {
+                if (activityListModel.getSize() > 0) {
+                    activityList.ensureIndexIsVisible(activityListModel.getSize() - 1);
+                }
+            });
+        }
+        catch (Exception e)
+        {
+            log.error("Failed to update activity log", e);
+            activityListModel.clear();
+            ActivityLogEntry errorEntry = new ActivityLogEntry("", "ERROR", "", "", 0, "", "", 
+                "Error displaying activity log.", 0);
+            activityListModel.addElement(errorEntry);
+        }
+    }
+    
     public void shutdown()
     {
         if (eventRefreshTimer != null)
         {
             eventRefreshTimer.stop();
+        }
+        if (activityRefreshTimer != null)
+        {
+            activityRefreshTimer.stop();
         }
         log.info("BingoMainPanel shutdown complete");
     }
@@ -773,6 +1068,170 @@ public class BingoMainPanel extends PluginPanel
         }
     }
     
+    // Custom renderer for activity log list
+    private static class ActivityLogCellRenderer extends DefaultListCellRenderer
+    {
+        @Override
+        public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                boolean isSelected, boolean cellHasFocus)
+        {
+            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            
+            if (value instanceof ActivityLogEntry)
+            {
+                ActivityLogEntry entry = (ActivityLogEntry) value;
+                
+                // Set the display text (no [View Screenshot] text needed)
+                setText(entry.getDisplayText());
+                
+                // Style based on activity type and screenshot availability
+                if (entry.getActivityType().equals("DROP") && entry.hasScreenshot())
+                {
+                    setForeground(isSelected ? Color.WHITE : new Color(255, 215, 0)); // Gold for drops with screenshots
+                    setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                }
+                else
+                {
+                    setForeground(isSelected ? Color.WHITE : Color.WHITE);
+                    setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                }
+                
+                // Set background colors
+                if (isSelected)
+                {
+                    setBackground(ACCENT_COLOR);
+                }
+                else
+                {
+                    setBackground(new Color(35, 35, 35));
+                }
+                
+                setFont(new Font("Monospaced", Font.PLAIN, 9));
+                setBorder(BorderFactory.createEmptyBorder(1, 3, 1, 3));
+            }
+            
+            return this;
+        }
+    }
+
+    // Activity log entry class
+    private static class ActivityLogEntry
+    {
+        private final String playerRsn;
+        private final String activityType;
+        private final String monsterName;
+        private final String dropName;
+        private final int totalKc;
+        private final String screenshotUrl;
+        private final String timestamp;
+        private final String formattedTime;
+        private final int teamId;
+        
+        public ActivityLogEntry(String playerRsn, String activityType, String monsterName, 
+                              String dropName, int totalKc, String screenshotUrl, String timestamp, 
+                              String formattedTime, int teamId)
+        {
+            this.playerRsn = playerRsn;
+            this.activityType = activityType;
+            this.monsterName = monsterName;
+            this.dropName = dropName;
+            this.totalKc = totalKc;
+            this.screenshotUrl = screenshotUrl;
+            this.timestamp = timestamp;
+            this.formattedTime = formattedTime;
+            this.teamId = teamId;
+        }
+        
+        public String getPlayerRsn() { return playerRsn; }
+        public String getActivityType() { return activityType; }
+        public String getMonsterName() { return monsterName; }
+        public String getDropName() { return dropName; }
+        public int getTotalKc() { return totalKc; }
+        public String getScreenshotUrl() { return screenshotUrl; }
+        public String getTimestamp() { return timestamp; }
+        public String getFormattedTime() { return formattedTime; }
+        public int getTeamId() { return teamId; }
+        public boolean hasScreenshot() { return screenshotUrl != null && !screenshotUrl.isEmpty(); }
+        
+        private String abbreviateName(String name)
+        {
+            if (name == null || name.isEmpty()) return name;
+            
+            // Common raid abbreviations
+            if (name.equalsIgnoreCase("Theatre of Blood")) return "T.o.B";
+            if (name.equalsIgnoreCase("Chambers of Xeric")) return "C.o.X";
+            if (name.equalsIgnoreCase("Tombs of Amascut")) return "T.o.A";
+            
+            // Boss abbreviations
+            if (name.equalsIgnoreCase("King Black Dragon")) return "KBD";
+            if (name.equalsIgnoreCase("Corporeal Beast")) return "Corp";
+            if (name.equalsIgnoreCase("Commander Zilyana")) return "Zilyana";
+            if (name.equalsIgnoreCase("General Graardor")) return "Graardor";
+            if (name.equalsIgnoreCase("Kree'arra")) return "Kree'arra";
+            if (name.equalsIgnoreCase("K'ril Tsutsaroth")) return "K'ril";
+            if (name.equalsIgnoreCase("Dagannoth Prime")) return "DK Prime";
+            if (name.equalsIgnoreCase("Dagannoth Rex")) return "DK Rex";
+            if (name.equalsIgnoreCase("Dagannoth Supreme")) return "DK Supreme";
+            if (name.equalsIgnoreCase("Barrows Brothers")) return "Barrows";
+            if (name.equalsIgnoreCase("Giant Mole")) return "Mole";
+            if (name.equalsIgnoreCase("Kalphite Queen")) return "KQ";
+            if (name.equalsIgnoreCase("Chaos Elemental")) return "Chaos Ele";
+            if (name.equalsIgnoreCase("Crazy Archaeologist")) return "C.Arch";
+            if (name.equalsIgnoreCase("Chaos Fanatic")) return "C.Fanatic";
+            if (name.equalsIgnoreCase("Scorpia")) return "Scorpia";
+            if (name.equalsIgnoreCase("Venenatis")) return "Venenatis";
+            if (name.equalsIgnoreCase("Vet'ion")) return "Vet'ion";
+            if (name.equalsIgnoreCase("Callisto")) return "Callisto";
+            if (name.equalsIgnoreCase("Zulrah")) return "Zulrah";
+            if (name.equalsIgnoreCase("Vorkath")) return "Vorkath";
+            if (name.equalsIgnoreCase("Alchemical Hydra")) return "Hydra";
+            if (name.equalsIgnoreCase("The Gauntlet")) return "Gauntlet";
+            if (name.equalsIgnoreCase("The Corrupted Gauntlet")) return "C.Gauntlet";
+            if (name.equalsIgnoreCase("The Nightmare")) return "Nightmare";
+            if (name.equalsIgnoreCase("Phosani's Nightmare")) return "P.Nightmare";
+            if (name.equalsIgnoreCase("Tempoross")) return "Tempoross";
+            if (name.equalsIgnoreCase("Wintertodt")) return "Wintertodt";
+            if (name.equalsIgnoreCase("Thermonuclear Smoke Devil")) return "Thermy";
+            if (name.equalsIgnoreCase("Cerberus")) return "Cerberus";
+            if (name.equalsIgnoreCase("Abyssal Sire")) return "Sire";
+            if (name.equalsIgnoreCase("Kraken")) return "Kraken";
+            if (name.equalsIgnoreCase("Grotesque Guardians")) return "Guardians";
+            
+            // Slayer monsters
+            if (name.equalsIgnoreCase("Smoke Devil")) return "Smoke Devil";
+            if (name.equalsIgnoreCase("Cave Horror")) return "Cave Horror";
+            if (name.equalsIgnoreCase("Skeletal Wyvern")) return "Wyvern";
+            
+            return name; // Return original if no abbreviation found
+        }
+        
+        public String getDisplayText()
+        {
+            switch (activityType)
+            {
+                case "BOSS_KILL":
+                case "KILL":
+                    return String.format("[%s] %s - %s (%dkc)", 
+                        formattedTime, playerRsn, abbreviateName(monsterName), totalKc);
+                    
+                case "RAID_COMPLETION":
+                    return String.format("[%s] %s - %s Raid (%dkc)", 
+                        formattedTime, playerRsn, abbreviateName(monsterName), totalKc);
+                    
+                case "DROP":
+                    return String.format("[%s] %s - %s (%dkc)", 
+                        formattedTime, playerRsn, dropName, totalKc);
+                        
+                case "INFO":
+                case "ERROR":
+                    return formattedTime; // For placeholder messages, formattedTime contains the message
+                    
+                default:
+                    return String.format("[%s] %s - %s", formattedTime, playerRsn, activityType);
+            }
+        }
+    }
+
     // Event item class for dropdown
     private static class EventItem
     {

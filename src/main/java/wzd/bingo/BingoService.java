@@ -633,4 +633,85 @@ public class BingoService
         
         return Optional.empty();
     }
+    
+    /**
+     * Fetch activity log for a specific bingo event
+     * @param bingoId The bingo event ID
+     * @return Optional containing activity log data if successful
+     */
+    public Optional<JsonObject> fetchActivityLog(String bingoId)
+    {
+        String apiEndpoint = config.authApiUrl() + "/api/bingo/activity/" + bingoId + "?limit=50";
+        
+        Request request = new Request.Builder()
+            .url(apiEndpoint)
+            .get()
+            .addHeader("Authorization", "Bearer " + config.jwtToken())
+            .addHeader("Accept", "application/json")
+            .addHeader("Content-Type", "application/json")
+            .build();
+        
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (response.isSuccessful() && response.body() != null)
+            {
+                String responseBody = response.body().string();
+                log.debug("Activity log API response: {}", responseBody.length() > 200 ? responseBody.substring(0, 200) + "..." : responseBody);
+                
+                // Check if response is empty
+                if (responseBody == null || responseBody.trim().isEmpty())
+                {
+                    log.warn("Empty response from activity log API");
+                    return Optional.empty();
+                }
+                
+                // Check if response is HTML (common when API returns error pages)
+                String trimmedResponse = responseBody.trim();
+                if (trimmedResponse.startsWith("<!") || trimmedResponse.startsWith("<html"))
+                {
+                    log.error("Activity log API returned HTML instead of JSON");
+                    return Optional.empty();
+                }
+                
+                // Try to parse as JSON
+                try
+                {
+                    JsonObject activityData = gson.fromJson(responseBody, JsonObject.class);
+                    log.debug("Successfully fetched activity log for bingo ID: {}", bingoId);
+                    return Optional.of(activityData);
+                }
+                catch (Exception jsonException)
+                {
+                    log.error("Failed to parse JSON response from activity log API", jsonException);
+                    return Optional.empty();
+                }
+            }
+            else if (response.code() == 401)
+            {
+                log.warn("JWT token expired while fetching activity log");
+                handleJwtExpiration();
+                return Optional.empty();
+            }
+            else if (response.code() == 404)
+            {
+                log.warn("Activity log API endpoint not found (404) for bingo ID: {}", bingoId);
+                return Optional.empty();
+            }
+            else
+            {
+                log.warn("Failed to fetch activity log: HTTP {} - {}", response.code(), response.message());
+                return Optional.empty();
+            }
+        }
+        catch (IOException e)
+        {
+            log.error("Network error during activity log request", e);
+        }
+        catch (Exception e)
+        {
+            log.error("Unexpected error during activity log request", e);
+        }
+        
+        return Optional.empty();
+    }
 } 
